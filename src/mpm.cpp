@@ -276,12 +276,8 @@ int main(int argc, char *argv[]) {
     std::cout << "Step " << i << "\r" << std::flush;
     simulation.advance();
     if (i % simulation_steps_per_frame == 0) {
-      if (render) {
-        frame_rate.sleep();
-        renderer.render(simulation.particles);
-      } else {
-        renderer.writeFrame();
-      }
+      frame_rate.sleep();
+      renderer.render(simulation.particles);
     }
   }
 }

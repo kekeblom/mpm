@@ -12,7 +12,6 @@ class Renderer {
     u32 vertex_buffer_object;
 
     u32 particle_count;
-    u32 frame_index = 0;
     const u32 frame_width = 800;
     const u32 frame_height = 600;
     const std::string save_dir;
@@ -24,7 +23,6 @@ class Renderer {
   public:
   Renderer(const u32, const std::string &);
   ~Renderer();
-  void writeFrame();
   void render(const std::vector<Particle>&);
 };
 

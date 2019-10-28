@@ -5,9 +5,6 @@
 #include <vector>
 #include <string>
 #include <boost/filesystem.hpp>
-#include <boost/gil.hpp>
-#include <boost/gil/image_view.hpp>
-#include <boost/gil/extension/io/png/write.hpp>
 #include "renderer.h"
 
 namespace fs = boost::filesystem;
@@ -124,13 +121,6 @@ Renderer::~Renderer() {
   glDeleteBuffers(1, &vertex_buffer_object);
   glDeleteVertexArrays(1, &vertex_array_object);
   delete[] frame_buffer;
-}
-
-void Renderer::writeFrame() {
-  using namespace boost::gil;
-  glReadPixels(0, 0, frame_width, frame_height, GL_RGB, GL_UNSIGNED_BYTE, (void *)frame_buffer);
-  rgb8_image_t img(frame_width, frame_height);
-  frame_index++;
 }
 
 void Renderer::render(const std::vector<Particle> &particles) {
