@@ -2,7 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <array>
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
 #include <assert.h>
 #include <boost/filesystem.hpp>
 #include <boost/multi_array.hpp>

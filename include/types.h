@@ -1,4 +1,4 @@
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
 #ifndef COMMON_TYPES
 #define COMMON_TYPES
 

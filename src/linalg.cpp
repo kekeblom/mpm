@@ -1,4 +1,4 @@
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
 #include "linalg.h"
 
 void polar_decomposition(const Mat &A, Mat &R, Mat &S) {

@@ -1,4 +1,4 @@
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
 #include <cmath>
 #include "gtest/gtest.h"
 #include "types.h"
@@ -34,5 +34,10 @@ TEST(TestPolar, UnitaryHermitian) {
   // Hermitian S.
   diff = Eigen::abs((S - S.transpose()).array()).sum();
   ASSERT_LT(diff, 1e-5);
+}
+
+int main(int argc, char **argv) {
+  testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
 
