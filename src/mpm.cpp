@@ -7,14 +7,15 @@
 #include <boost/filesystem.hpp>
 #include <boost/multi_array.hpp>
 #include <omp.h>
+#include <Partio.h>
 #include "options.h"
 #include "linalg.h"
 #include "utils.h"
 #include "renderer.h"
+#include "particle_writer.h"
 
 namespace fs = boost::filesystem;
 
-const unsigned int ParticleCount = 1000;
 const unsigned int FrameRate = 60;
 
 const real particle_mass = 1.0;
@@ -46,13 +47,14 @@ class Simulation {
   private:
     const CLIOptions flags;
     const u32 N;
+    const u32 particle_count;
 
   public:
     std::vector<Particle> particles;
     boost::multi_array<Vec4, 3> grid; // Velocity x, y, z, mass
 
-    Simulation(const CLIOptions &opts) : flags(opts), N(opts.N), grid(boost::extents[opts.N][opts.N][opts.N]) {
-      u32 side = int(std::cbrt(ParticleCount));
+    Simulation(const CLIOptions &opts) : flags(opts), N(opts.N), grid(boost::extents[opts.N][opts.N][opts.N]), particle_count(opts.particle_count) {
+      u32 side = int(std::cbrt(particle_count));
       real start = opts.N / 3 * flags.dx;
       real random_size = opts.N / 3 * flags.dx;
       for (u32 i=0; i < side; i++) {
@@ -104,8 +106,7 @@ class Simulation {
 
   void particleToGridTransfer() {
     // Particle-to-grid.
-    #pragma omp parallel for
-    for (u32 pi=0; pi < ParticleCount; pi++) {
+    for (u32 pi=0; pi < particle_count; pi++) {
       Particle &particle = particles[pi];
       Eigen::Matrix<u32, 3, 1> base_coordinate = (particle.x * flags.N_real - Vec::Ones() * 0.5).cast<u32>();
 
@@ -136,7 +137,6 @@ class Simulation {
       u32 until_i = std::min<u32>(base_coordinate(0) + 3, N-1);
       u32 until_j = std::min<u32>(base_coordinate(1) + 3, N-1);
       u32 until_k = std::min<u32>(base_coordinate(2) + 3, N-1);
-      #pragma omp critical
       for (u32 i = base_coordinate(0); i < until_i; i++) {
         real weight_i = getWeight(std::abs(i - grid_x(0)));
         u32 relative_i = i - base_coordinate(0);
@@ -200,7 +200,7 @@ class Simulation {
   void gridToParticleTransfer() {
     // Grid-to-particle.
     #pragma omp parallel for
-    for (u32 pi=0; pi < ParticleCount; pi++) {
+    for (u32 pi=0; pi < particle_count; pi++) {
       Particle &particle = particles[pi];
       Eigen::Matrix<u32, 3, 1> base_coordinate = (particle.x * flags.N_real - Vec::Ones() * 0.5).cast<u32>();
 
@@ -256,28 +256,28 @@ class Simulation {
 };
 
 int main(int argc, char *argv[]) {
-  Rate frame_rate(FrameRate);
   CLIOptions flags(argc, argv);
   Simulation simulation(flags);
+  ParticleWriter writer;
 
-  float time_per_frame = 1.0 / FrameRate;
-  unsigned int simulation_steps_per_frame = std::round(time_per_frame / flags.dt);
+  Renderer renderer(flags.particle_count, flags.save_dir);
 
-  const bool render = flags.save_dir.empty();
-  if (!render) {
+  renderer.render(simulation.particles);
+
+  bool save = flags.save_dir != "";
+  if (save) {
     fs::create_directory(flags.save_dir);
   }
-
-  Renderer renderer(ParticleCount, flags.save_dir);
-
-  if (render) renderer.render(simulation.particles);
 
   for (unsigned int i = 0; i < 50000; i++) {
     std::cout << "Step " << i << "\r" << std::flush;
     simulation.advance();
-    if (i % simulation_steps_per_frame == 0) {
-      frame_rate.sleep();
-      renderer.render(simulation.particles);
+    renderer.render(simulation.particles);
+    if (save) {
+      std::stringstream ss;
+      ss << flags.save_dir << "/particles_" << i << ".bgeo";
+      std::string filepath = ss.str();
+      writer.writeParticles(filepath, simulation.particles);
     }
   }
 }
