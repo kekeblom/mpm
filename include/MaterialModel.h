@@ -8,7 +8,10 @@
 class MaterialModelBase {
 	
 public:
-	//Mat computePF(Particle const & particle) const;	// should be contained in every material model
+	
+	// should be contained in every material model:
+	Mat computePF(Particle const & particle) const;	// couchy stress, i.e. partial_Psi/partial_F (Psi being the enerty)
+	void postStepModification(Particle & particle) const; // modify particle at end of step. Used to e.g. introduce plasticity
 	
 	
 public:

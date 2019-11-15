@@ -14,6 +14,10 @@ using f64 = double;
 using Vec = Eigen::Matrix<real, 3, 1>;
 using Mat = Eigen::Matrix<real, 3, 3>;
 
+using Veci = Eigen::Matrix<int, 3, 1>;
+using VecU32 = Eigen::Matrix<u32, 3, 1>;
+
+
 struct Particle {
   Vec x; // Position.
   Vec v; // Velocity.
