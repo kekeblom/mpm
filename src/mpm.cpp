@@ -53,7 +53,7 @@ class Simulation {
     std::vector<Particle> particles;
     boost::multi_array<Vec4, 3> grid; // Velocity x, y, z, mass
 
-    Simulation(const CLIOptions &opts) : flags(opts), N(opts.N), grid(boost::extents[opts.N][opts.N][opts.N]), particle_count(opts.particle_count) {
+    Simulation(const CLIOptions &opts) : flags(opts), N(opts.N), particle_count(opts.particle_count), grid(boost::extents[opts.N][opts.N][opts.N]) {
       u32 side = int(std::cbrt(particle_count));
       real start = opts.N / 3 * flags.dx;
       real random_size = opts.N / 3 * flags.dx;
