@@ -1,4 +1,7 @@
+#ifdef PARTIO_AVAILABLE
 #include <Partio.h>
+#endif
+
 #include "types.h"
 
 class ParticleWriter {

@@ -7,11 +7,11 @@
 #include <boost/filesystem.hpp>
 #include <boost/multi_array.hpp>
 #include <omp.h>
-#include <Partio.h>
 #include "options.h"
 #include "linalg.h"
 #include "utils.h"
 #include "renderer.h"
+
 #include "particle_writer.h"
 
 namespace fs = boost::filesystem;

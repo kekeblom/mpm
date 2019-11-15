@@ -28,8 +28,16 @@ link_directories(${LOCAL_LIB_DIR})
 
 set(COMMON_LIBRARIES ${OPENGL_gl_LIBRARY} glfw OpenMP::OpenMP_CXX Boost::filesystem ${PNG_LIBRARIES} ${CMAKE_DL_LIBS})
 
+# add Partio (if available)
 find_library(PARTIO partio PATH ${LOCAL_LIB_DIR})
-target_link_libraries(mpm ${COMMON_LIBRARIES} ${PARTIO})
+if(PARTIO)
+	set(COMMON_LIBRARIES ${COMMON_LIBRARIES} ${PARTIO})
+	set(PARTIO_AVAILABLE)
+else()
+	message("Warnig: Partio library not found, will not be able to write particles to file.")
+endif()
+
+target_link_libraries(mpm ${COMMON_LIBRARIES})
 
 #-------------------
 # Testing

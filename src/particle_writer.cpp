@@ -1,6 +1,8 @@
+#include <iostream>
 #include "particle_writer.h"
 
 void ParticleWriter::writeParticles(const std::string& filepath, const std::vector<Particle>&particles) {
+#ifdef PARTIO_AVAILABLE
   Partio::ParticlesDataMutable &particle_data = *Partio::create();
   Partio::ParticleAttribute id_attr = particle_data.addAttribute("id", Partio::INT, 1);
   Partio::ParticleAttribute position_attr = particle_data.addAttribute("position", Partio::VECTOR, 3);
@@ -26,5 +28,8 @@ void ParticleWriter::writeParticles(const std::string& filepath, const std::vect
   }
   Partio::write(filepath.c_str(), particle_data, true);
   particle_data.release();
+#else
+	std::cout << "Warning: Particles could not be written because Partio library is missing." << std::endl;
+#endif
 }
 
