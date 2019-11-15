@@ -11,6 +11,7 @@
 #include "linalg.h"
 #include "utils.h"
 #include "renderer.h"
+#include "MaterialModel.h"
 
 #include "particle_writer.h"
 
@@ -20,13 +21,8 @@ const unsigned int FrameRate = 60;
 
 const real particle_mass = 1.0;
 const real particle_volume = 1.0;
-const real hardening = 10.0;
-const real E = 1e5;
-const real Nu = 0.3;
 const real Gravity = -2000.0;
 
-const real Mu0 = E / (2 * (1 + Nu));
-const real Lambda0 = E * Nu / ((1 + Nu) * (1 - 2 * Nu));
 
 using Vec4 = Eigen::Matrix<real, 4, 1>;
 
@@ -43,8 +39,11 @@ T square(const T& value) {
   return value * value;
 }
 
+template<class MaterialModel>
 class Simulation {
   private:
+	MaterialModel materialModel;
+	
     const CLIOptions flags;
     const u32 N;
     const u32 particle_count;
@@ -53,7 +52,12 @@ class Simulation {
     std::vector<Particle> particles;
     boost::multi_array<Vec4, 3> grid; // Velocity x, y, z, mass
 
-    Simulation(const CLIOptions &opts) : flags(opts), N(opts.N), grid(boost::extents[opts.N][opts.N][opts.N]), particle_count(opts.particle_count) {
+    Simulation(const CLIOptions &opts, MaterialModel const & materialModel) 
+		: flags(opts), 
+		  N(opts.N), 
+		  grid(boost::extents[opts.N][opts.N][opts.N]), particle_count(opts.particle_count),
+		  materialModel(materialModel)
+	{
       u32 side = int(std::cbrt(particle_count));
       real start = opts.N / 3 * flags.dx;
       real random_size = opts.N / 3 * flags.dx;
@@ -113,19 +117,10 @@ class Simulation {
       assert(base_coordinate(1) < N);
 
       Vec fx = particle.x * flags.N_real - base_coordinate.cast<real>();
-
-      real e = std::exp(hardening * (1.0 - particle.Jp));
-      real mu = Mu0 * e;
-      real lambda = Lambda0 * e;
-
-      real J = particle.Jp;
-
-      Mat R, S;
-      polar_decomposition(particle.F, R, S);
-
       real Dinv = 4 * flags.N_real * flags.N_real;
-      Mat PF = (2 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1) * J) * (particle.F.inverse().transpose());
 
+	  Mat PF = materialModel.computePF(particle);
+	  
       Mat stress = -Dinv * flags.dt * particle_volume * PF * particle.F.transpose();
 
       Mat affine = stress + particle_mass * particle.C;
@@ -257,7 +252,7 @@ class Simulation {
 
 int main(int argc, char *argv[]) {
   CLIOptions flags(argc, argv);
-  Simulation simulation(flags);
+  Simulation simulation(flags, MMSnow());
   ParticleWriter writer;
 
   Renderer renderer(flags.particle_count, flags.save_dir);
