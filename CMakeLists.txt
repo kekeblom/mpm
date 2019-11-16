@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CXX_EXTENSIONS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY bin)
 
+set(USE_OPENMP FALSE)
+
 include(CMakePackageConfigHelpers)
 
 file(GLOB TARGET_SOURCES src/*.cpp src/*.c)
@@ -18,7 +20,11 @@ find_package(Threads REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(Eigen3 3.3 REQUIRED)
 find_package(GTest REQUIRED)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+if(USE_OPENMP)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+	message("using openMP")
+endif()
+
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
@@ -26,8 +32,13 @@ set(COMMON_INCLUDES ${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/shaders 
 include_directories(${COMMON_INCLUDES} ${LOCAL_INCLUDE_DIR})
 link_directories(${LOCAL_LIB_DIR})
 
-set(COMMON_LIBRARIES ${OPENGL_gl_LIBRARY} glfw OpenMP::OpenMP_CXX Boost::filesystem ${PNG_LIBRARIES} ${CMAKE_DL_LIBS})
+set(COMMON_LIBRARIES ${OPENGL_gl_LIBRARY} glfw  Boost::filesystem ${PNG_LIBRARIES} ${CMAKE_DL_LIBS})
 
+if(USE_OPENMP)
+	set(COMMON_LIBRARIES ${COMMON_LIBRARIES} OpenMP::OpenMP_CXX)
+endif()
+	
+	
 # add Partio (if available)
 find_library(PARTIO partio PATH ${LOCAL_LIB_DIR})
 if(PARTIO)
