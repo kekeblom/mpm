@@ -26,14 +26,14 @@ const unsigned int FrameRate = 60;
 
 const real particle_mass = 1.0;
 const real particle_volume = 1.0;
-const real Gravity = -2000.0;
+const real Gravity = -200.0;
 
 
 
 
-real clamp(const real &number, const real &lower, const real &upper) {
-  return std::max(std::min(number, upper), lower);
-}
+//real clamp(const real &number, const real &lower, const real &upper) {
+//  return std::max(std::min(number, upper), lower);
+//}
 
 float get_random() {
   return float(rand()) / float(RAND_MAX);
@@ -75,7 +75,7 @@ class Simulation {
 		: flags(opts), 
 		  par(opts.dt, opts.N),
 //		  N(opts.N), 
-		  grid(boost::extents[opts.N][opts.N][opts.N]), 
+		  grid(boost::extents[par.N][par.N][par.N]), 
 		  particle_count_target(opts.particle_count),
 		  materialModel(materialModel),
 		  interpolationKernel(interpolationKernel)
@@ -153,21 +153,21 @@ class Simulation {
 	  u32 i_begin = std::max(0, -range_begin(0));
 	  u32 j_begin = std::max(0, -range_begin(1));
 	  u32 k_begin = std::max(0, -range_begin(2));
-	  u32 i_end = std::min(interpolationKernel.size(), flags.N - range_begin(0));
-	  u32 j_end = std::min(interpolationKernel.size(), flags.N - range_begin(1));
-	  u32 k_end = std::min(interpolationKernel.size(), flags.N - range_begin(2));
+	  u32 i_end = std::min(interpolationKernel.size(), par.N - range_begin(0));
+	  u32 j_end = std::min(interpolationKernel.size(), par.N - range_begin(1));
+	  u32 k_end = std::min(interpolationKernel.size(), par.N - range_begin(2));
 	  
 	  for(u32 i = i_begin; i < i_end; ++i) {
 		  u32 i_glob = range_begin(0) + i;
-		  dist_part2node(0) = i_glob * flags.dx - particle.x(0);
+		  dist_part2node(0) = i_glob * par.dx - particle.x(0);
 		  
 		  for(u32 j = j_begin; j < j_end; ++j) {
 			  u32 j_glob = range_begin(1) + j;
-			  dist_part2node(1) = j_glob * flags.dx - particle.x(1);
+			  dist_part2node(1) = j_glob * par.dx - particle.x(1);
 			  
 			  for(u32 k = k_begin; k < k_end; ++k) {
 				  u32 k_glob = range_begin(2) + k;
-				  dist_part2node(2) = k_glob * flags.dx - particle.x(2);
+				  dist_part2node(2) = k_glob * par.dx - particle.x(2);
 				  
 				  Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, dist_part2node, particle_mass, i, j, k);
 				  for(int idx = 0; idx < 4; ++idx) {
@@ -198,7 +198,7 @@ class Simulation {
           if (cell[3] > 0.0) {
             cell /= cell[3];
 
-            cell += flags.dt * Vec4(0, Gravity, 0, 0);
+            cell += par.dt * Vec4(0, Gravity, 0, 0);
 
             const real boundary = 0.05;
 
@@ -230,68 +230,63 @@ class Simulation {
     for (u32 pi = 0; pi < particles.size(); ++pi) {
       Particle & particle = particles[pi];
 		
-      Eigen::Matrix<u32, 3, 1> base_coordinate = (static_cast<ParticleBase>(particle).x * par.N_real - Vec::Ones() * 0.5).cast<u32>();
-
-      Vec fx = particle.x * flags.N_real - base_coordinate.cast<real>();
-
-      particle.C = Mat::Zero();
-      particle.v = Vec::Zero();
-
-      auto grid_x = particle.x * flags.N_real;
-
-      u32 until_i = std::min<u32>(base_coordinate(0) + 3, N-1);
-      u32 until_j = std::min<u32>(base_coordinate(1) + 3, N-1);
-      u32 until_k = std::min<u32>(base_coordinate(2) + 3, N-1);
-      for (u32 i = base_coordinate(0); i < until_i; i++) {
-        u32 relative_i = i - base_coordinate(0);
-        real weight_i = getWeight(std::abs(i - grid_x(0)));
-        for (u32 j = base_coordinate(1); j < until_j; j++) {
-          u32 relative_j = j - base_coordinate(1);
-          real weight_j = getWeight(std::abs(j - grid_x(1)));
-          for (u32 k = base_coordinate(2); k < until_k; k++) {
-            real weight_k = getWeight(std::abs(k - grid_x(2)));
-            u32 relative_k = k - base_coordinate(2);
-            Vec position_diff = (Vec(relative_i, relative_j, relative_k) - fx) * flags.dx;
-            auto &grid_cell = grid[i][j][k];
-            Vec grid_velocity = Vec(grid_cell[0], grid_cell[1], grid_cell[2]);
-            real weight = weight_i * weight_j * weight_k;
-            Vec weighted_grid_velocity = weight * grid_velocity;
-            particle.v += weighted_grid_velocity;
-            Eigen::Matrix<real, 3, 3> C_diff = 4 * flags.N_real * (weighted_grid_velocity * position_diff.transpose());
-            particle.C += C_diff;
-			
-//			if(std::isnan(particle.v(0)) || std::isnan(particle.v(1)) || std::isnan(particle.v(2))) {
-//				assert(false);
-//			}
-			
-          }
-        }
-      }
-      particle.x += flags.dt * particle.v;
-
-      Mat F = (Mat::Identity() + flags.dt * particle.C) * particle.F;
-      auto svd = F.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
-      Mat sigma = svd.singularValues().asDiagonal();
-      Mat U = svd.matrixU();
-      Mat V = svd.matrixV();
-      for (size_t i = 0; i < 2; i++) {
-        sigma(i, i) = clamp(sigma(i, i), 1.0 - 2.5e-2, 1.0 + 7.5e-3);
-      }
-
-      real oldJ = F.determinant();
-      F = U * sigma * V.transpose();
-
-      real newJ = clamp(particle.Jp * oldJ / F.determinant(), 0.6, 20.0);
-      particle.Jp = newJ;
-      particle.F = F;
 	  
-	  if(std::abs(particle.F.determinant()) < 1.0e-9) {
-		  assert(false);
+	  
+	  
+	  TransferScheme transferScheme;
+	  transferScheme.g2p_prepare_particle(particle,
+										  par,
+										  interpolationKernel);
+	  
+	  Veci range_begin = transferScheme.get_range_begin();
+	  
+	  
+	  Vec dist_part2node;
+	  u32 i_begin = std::max(0, -range_begin(0));
+	  u32 j_begin = std::max(0, -range_begin(1));
+	  u32 k_begin = std::max(0, -range_begin(2));
+	  u32 i_end = std::min(interpolationKernel.size(), par.N - range_begin(0));
+	  u32 j_end = std::min(interpolationKernel.size(), par.N - range_begin(1));
+	  u32 k_end = std::min(interpolationKernel.size(), par.N - range_begin(2));
+	  
+	  for(u32 i = i_begin; i < i_end; ++i) {
+		  u32 i_glob = range_begin(0) + i;
+		  dist_part2node(0) = i_glob * par.dx - particle.x(0);
+		  
+		  for(u32 j = j_begin; j < j_end; ++j) {
+			  u32 j_glob = range_begin(1) + j;
+			  dist_part2node(1) = j_glob * par.dx - particle.x(1);
+			  
+			  for(u32 k = k_begin; k < k_end; ++k) {
+				  u32 k_glob = range_begin(2) + k;
+				  dist_part2node(2) = k_glob * par.dx - particle.x(2);
+				  
+				  // actual transfer
+				  // velocity
+				  transferScheme.g2p_node_contribution(particle,
+														dist_part2node,
+														grid[i_glob][j_glob][k_glob],
+														i, j, k);
+			  }
+		  }
 	  }
+	  
+	  transferScheme.g2p_finish_particle(particle,
+										  par);
+	  
+	  // plasticity
+	  materialModel.endOfStepMutation(particle);
+	  
+	  // advection
+	  particle.x += par.dt * particle.v;
+	  
 	  
 	  
     }
   }
+  
+  
+  
 };
 
 int main(int argc, char *argv[]) {

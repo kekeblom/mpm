@@ -39,9 +39,11 @@ class ParticleBase {
 public:
 	Vec x; // Position.
     Vec v; // Velocity.
+	Mat F; // Deformation gradient.
 	
 	ParticleBase(Vec x = Vec::Zero(), Vec v = Vec::Zero()) 
-	    : x(x), v(v)
+	    : x(x), v(v),
+		  F(Mat::Identity())
 	{}
 };
 

@@ -22,7 +22,7 @@ public:
 	    dt(dt),
 	    N(N),
 	    N_real(static_cast<real>(N)),
-	    dx(1.0/(N-1)),
+	    dx(1.0/(N)),
 	    dx_inv(1.0/dx)
 	{}
 };
@@ -35,12 +35,11 @@ public:
 
 class MLS_APIC_Particle : public ParticleBase {
 public:
-	Mat F; // Deformation gradient.
+	
 	Mat C; // Affine momentum.
-	real Jp; // Determinant of the deformation gradient.
+	real Jp; // Determinant of the deformation gradient.		// used for hardening of snow
 	MLS_APIC_Particle(Vec x = Vec::Zero(), Vec v = Vec::Zero()) :
 		ParticleBase(x, v),
-		F(Mat::Identity()),
 		C(Mat::Zero()),
 		Jp(1.0)
 	{}
@@ -60,6 +59,7 @@ class MLS_APIC_Scheme : public TransferSchemeBase {
 
 public:
 	
+	Mat Dinv;
 	Mat affine;
 	Veci range_begin;
 	Eigen::Matrix<real, 3, InterpolationKernel::size()> weights;
@@ -76,14 +76,13 @@ public:
 	                          MaterialModel const & materialModel)
 	{
 		
-	    weights = interpolationKernel.weights_per_direction(particle.x, par.N_real, range_begin);
+	    weights = interpolationKernel.weights_per_direction(particle.x, par.dx_inv, range_begin);
 		
-		Mat Dinv;
-	    if (InterpolationKernel::d_is_const()) {
-		    Dinv = interpolationKernel.D_inv(par.N_real);
+	    if constexpr (InterpolationKernel::d_is_const()) {
+		    Dinv = interpolationKernel.D_inv(par.dx_inv);
 	    }
 	    else {
-//		    Dinv = interpolationKernel.D_inv(particle.x, range_begin, weights, par.dx);
+		    Dinv = interpolationKernel.D_inv(particle.x, range_begin, weights, par.dx);
 	    }
   
 	    Mat PF = materialModel.computePF(particle);
@@ -94,7 +93,7 @@ public:
         affine = stress + particle_mass * particle.C;
 	}
 	
-	// ATTENTION: only to be called after p2g_prepare_particle()
+	// ATTENTION: only to be called after p2g_prepare_particle() or g2p_prepare_particle()
 	Veci get_range_begin()
 	{
 		return range_begin;
@@ -118,6 +117,50 @@ public:
 		
 		return weight * momentum_mass;
 	}
+	
+	
+	
+	void g2p_prepare_particle(MLS_APIC_Particle & particle,
+	                          SimulationParameters const & par,
+	                          InterpolationKernel const & interpolationKernel)
+	{
+		weights = interpolationKernel.weights_per_direction(particle.x, par.dx_inv, range_begin);
+		
+	    if constexpr (InterpolationKernel::d_is_const()) {
+		    Dinv = interpolationKernel.D_inv(par.dx_inv);
+	    }
+	    else {
+		    Dinv = interpolationKernel.D_inv(particle.x, range_begin, weights, par.dx);
+	    }
+		
+		
+		particle.C = Mat::Zero();
+		particle.v = Vec::Zero();
+	}
+	
+	
+	void g2p_node_contribution(MLS_APIC_Particle & particle,
+	                  Vec const & dist_part2node, 
+	                  Vec4 const & grid_node,
+                      int i, int j, int k)
+	{
+		real weight = weights(0, i) * weights(1, j) * weights(2, k);
+		
+		Vec v_grid = grid_node.head<3>();
+		particle.v += weight * v_grid;
+		
+		//particle.C += (Dinv * v_grid) * (weight * dist_part2node).transpose();
+		particle.C += (weight * v_grid) * (dist_part2node.transpose() * Dinv);
+	}
+	
+	
+	void g2p_finish_particle(MLS_APIC_Particle & particle,
+	                         SimulationParameters const & par)
+	{
+		// MLS-MPM F-update
+		particle.F = (Mat::Identity() + par.dt * particle.C) * particle.F;
+	}
+	
 	
 };
 

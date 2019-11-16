@@ -33,13 +33,13 @@ class Renderer {
 
 template<class Particle>
 inline void Renderer::setParticlePositions(const std::vector<Particle> &particles) {
-  for (u32 i=0; i < particle_count; i++) {
+  for (u32 i=0; i < particles.size(); i++) {
     particle_positions[i*3  ] = (particles[i].x[0] - 0.5f) * 1.8f;
     particle_positions[i*3+1] = (particles[i].x[1] - 0.5f) * 1.8f;
     particle_positions[i*3+2] = (particles[i].x[2] - 0.5f) * 1.8f;
   }
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_object);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * particle_count, particle_positions, GL_STREAM_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * particles.size(), particle_positions, GL_STREAM_DRAW);
 }
 
 
@@ -50,7 +50,7 @@ inline void Renderer::render(const std::vector<Particle> &particles) {
 
   setParticlePositions(particles);
   glBindVertexArray(vertex_array_object);
-  glDrawArrays(GL_POINTS, 0, particle_count);
+  glDrawArrays(GL_POINTS, 0, particles.size());
   if (glGetError()) {
     std::cout << "error";
   }

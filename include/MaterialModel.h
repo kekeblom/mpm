@@ -5,6 +5,15 @@
 #include "types.h"
 #include "linalg.h"
 
+
+
+inline real clamp(const real &number, const real &lower, const real &upper) {
+  return std::max(std::min(number, upper), lower);
+}
+
+
+
+
 template <class Particle>
 class MaterialModelBase {
 	
@@ -45,6 +54,11 @@ public:
 		real const & J = particle.Jp;
 		return (2.0 * mu0 * (particle.F - R) * particle.F.transpose()) + lambda0 * ((J - 1.0) * J) * (particle.F.inverse().transpose());
 	}
+	
+	void endOfStepMutation(Particle & particle)
+	{
+		
+	}
 };
 
 template <class Particle>
@@ -55,7 +69,7 @@ public:
 	
 public:
 	
-	MMSnow(real E = 1.0e5, real Nu = 0.3, real hardening = 10)
+	MMSnow(real E = 1.0e4, real Nu = 0.2, real hardening = 10)
 	    : MMFixedCorotated<Particle>(E, Nu), 
 	      hardening(hardening)
 	{}
@@ -70,6 +84,28 @@ public:
 		real lambda = this->lambda0 * e;
 		real const & J = particle.Jp;
 		return (2.0 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1.0) * J) * (particle.F.inverse().transpose());
+	}
+	
+	
+	void endOfStepMutation(Particle & particle)
+	{
+		// plasticity
+		Mat & F = particle.F;
+		
+		auto svd = F.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
+		Mat sigma = svd.singularValues().asDiagonal();
+		Mat U = svd.matrixU();
+		Mat V = svd.matrixV();
+		for (size_t i = 0; i < 2; i++) {
+			sigma(i, i) = clamp(sigma(i, i), 1.0 - 2.5e-2, 1.0 + 7.5e-3);
+		}
+		
+		real oldJ = F.determinant();
+		F = U * sigma * V.transpose();
+		
+		real newJ = clamp(particle.Jp * oldJ / F.determinant(), 0.6, 20.0);
+		particle.Jp = newJ;
+		
 	}
 };
 
