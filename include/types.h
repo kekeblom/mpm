@@ -14,23 +14,36 @@ using f64 = double;
 using Vec = Eigen::Matrix<real, 3, 1>;
 using Mat = Eigen::Matrix<real, 3, 3>;
 
+using Vec4 = Eigen::Matrix<real, 4, 1>;
+
 using Veci = Eigen::Matrix<int, 3, 1>;
 using VecU32 = Eigen::Matrix<u32, 3, 1>;
 
+// moved to TransferScheme.h
+//struct Particle {
+//  Vec x; // Position.
+//  Vec v; // Velocity.
+//  Mat F; // Deformation gradient.
+//  Mat C; // Affine momentum.
+//  real Jp; // Determinant of the deformation gradient.
+//  Particle(Vec &x, Vec v = Vec::Zero()) :
+//    x(x[0], x[1], x[2]),
+//    v(v[0], v[1], v[2]),
+//    F(Mat::Identity()),
+//    C(Mat::Zero()),
+//    Jp(1.0)
+//    {}
+//};
 
-struct Particle {
-  Vec x; // Position.
-  Vec v; // Velocity.
-  Mat F; // Deformation gradient.
-  Mat C; // Affine momentum.
-  real Jp; // Determinant of the deformation gradient.
-  Particle(Vec &x, Vec v = Vec::Zero()) :
-    x(x[0], x[1], x[2]),
-    v(v[0], v[1], v[2]),
-    F(Mat::Identity()),
-    C(Mat::Zero()),
-    Jp(1.0)
-    {}
+class ParticleBase {
+public:
+	Vec x; // Position.
+    Vec v; // Velocity.
+	
+	ParticleBase(Vec x = Vec::Zero(), Vec v = Vec::Zero()) 
+	    : x(x), v(v)
+	{}
 };
+
 
 #endif

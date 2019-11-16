@@ -16,6 +16,7 @@
 
 #include "MaterialModel.h"
 #include "InterpolationKernel.h"
+#include "TransferScheme.h"
 
 #include "particle_writer.h"
 
@@ -28,7 +29,7 @@ const real particle_volume = 1.0;
 const real Gravity = -2000.0;
 
 
-using Vec4 = Eigen::Matrix<real, 4, 1>;
+
 
 real clamp(const real &number, const real &lower, const real &upper) {
   return std::max(std::min(number, upper), lower);
@@ -43,23 +44,37 @@ T square(const T& value) {
   return value * value;
 }
 
-template<class MaterialModel, class InterpolationKernel>
+
+
+
+
+
+
+
+template<class MaterialModel, class InterpolationKernel, class TransferScheme, class Particle>
 class Simulation {
   private:
 	MaterialModel materialModel;
 	InterpolationKernel interpolationKernel;
 	
     const CLIOptions flags;
-    const u32 N;
+	
+	SimulationParameters par;
+    u32 & N = par.N;
     const u32 particle_count_target;
 
   public:
     std::vector<Particle> particles;
     boost::multi_array<Vec4, 3> grid; // Velocity x, y, z, mass
 
-    Simulation(const CLIOptions &opts, MaterialModel const & materialModel, InterpolationKernel const & interpolationKernel) 
+    Simulation(const CLIOptions &opts, 
+			   MaterialModel const & materialModel, 
+			   InterpolationKernel const & interpolationKernel,
+			   TransferScheme const & transferScheme_dummy,
+			   Particle const & particle_dummy) 
 		: flags(opts), 
-		  N(opts.N), 
+		  par(opts.dt, opts.N),
+//		  N(opts.N), 
 		  grid(boost::extents[opts.N][opts.N][opts.N]), 
 		  particle_count_target(opts.particle_count),
 		  materialModel(materialModel),
@@ -85,10 +100,11 @@ class Simulation {
       for (u32 i=0; i < N; i++) {
         for (u32 j=0; j < N; j++) {
           for (u32 k=0; k < N; k++) {
-            grid[i][j][k](0) = 0;
-            grid[i][j][k](1) = 0;
-            grid[i][j][k](2) = 0;
-            grid[i][j][k](3) = 0.0;
+//            grid[i][j][k](0) = 0;
+//            grid[i][j][k](1) = 0;
+//            grid[i][j][k](2) = 0;
+//            grid[i][j][k](3) = 0.0;
+			  grid[i][j][k] = Vec4::Constant(0.0);
           }
         }
       }
@@ -117,22 +133,23 @@ class Simulation {
 
   void particleToGridTransfer() {
     // Particle-to-grid.
+	
+	#pragma omp parallel
 	for (u32 pi = 0; pi < particles.size(); ++pi) {
 	  Particle & particle = particles[pi];
 	  
-	  Veci range_begin;
-	  auto weights = interpolationKernel.weights_per_direction(particle.x, flags.N_real, range_begin);
+	  TransferScheme transferScheme;
+	  transferScheme.p2g_prepare_particle(particle, 
+										  par, 
+										  particle_volume,
+										  particle_mass,
+										  interpolationKernel,
+										  materialModel);
 	  
-      real Dinv = 4 * flags.N_real * flags.N_real;
-
-	  Mat PF = materialModel.computePF(particle);
-	  
-      Mat stress = -Dinv * flags.dt * particle_volume * PF * particle.F.transpose();
-
-      Mat affine = stress + particle_mass * particle.C;
+	  Veci range_begin = transferScheme.get_range_begin();
 	  
 	  
-	  Vec diff_part2node;
+	  Vec dist_part2node;
 	  u32 i_begin = std::max(0, -range_begin(0));
 	  u32 j_begin = std::max(0, -range_begin(1));
 	  u32 k_begin = std::max(0, -range_begin(2));
@@ -142,27 +159,21 @@ class Simulation {
 	  
 	  for(u32 i = i_begin; i < i_end; ++i) {
 		  u32 i_glob = range_begin(0) + i;
-		  diff_part2node(0) = i_glob * flags.dx - particle.x(0);
+		  dist_part2node(0) = i_glob * flags.dx - particle.x(0);
 		  
 		  for(u32 j = j_begin; j < j_end; ++j) {
 			  u32 j_glob = range_begin(1) + j;
-			  diff_part2node(1) = j_glob * flags.dx - particle.x(1);
+			  dist_part2node(1) = j_glob * flags.dx - particle.x(1);
 			  
 			  for(u32 k = k_begin; k < k_end; ++k) {
 				  u32 k_glob = range_begin(2) + k;
-				  diff_part2node(2) = k_glob * flags.dx - particle.x(2);
+				  dist_part2node(2) = k_glob * flags.dx - particle.x(2);
 				  
-				  
-				  Vec momentum = particle.v * particle_mass;
-				  Vec momentum_affine_delta_pos = momentum + affine * diff_part2node;
-				  Vec4 momentum_mass(momentum_affine_delta_pos(0),
-									momentum_affine_delta_pos(1),
-									momentum_affine_delta_pos(2),
-									particle_mass);
-				  
-				  real weight = weights(0, i) * weights(1, j) * weights(2, k);
-				  
-				  grid[i_glob][j_glob][k_glob] += weight * momentum_mass;
+				  Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, dist_part2node, particle_mass, i, j, k);
+				  for(int idx = 0; idx < 4; ++idx) {
+					  #pragma omp atomic
+					  grid[i_glob][j_glob][k_glob](idx) += node_contribution(idx);
+				  }
 				  
 			  }
 		  }
@@ -219,7 +230,7 @@ class Simulation {
     for (u32 pi = 0; pi < particles.size(); ++pi) {
       Particle & particle = particles[pi];
 		
-		Eigen::Matrix<u32, 3, 1> base_coordinate = (particle.x * flags.N_real - Vec::Ones() * 0.5).cast<u32>();
+      Eigen::Matrix<u32, 3, 1> base_coordinate = (static_cast<ParticleBase>(particle).x * par.N_real - Vec::Ones() * 0.5).cast<u32>();
 
       Vec fx = particle.x * flags.N_real - base_coordinate.cast<real>();
 
@@ -285,7 +296,14 @@ class Simulation {
 
 int main(int argc, char *argv[]) {
   CLIOptions flags(argc, argv);
-  Simulation simulation(flags, MMSnow(), QuadraticInterpolationKernel());
+  
+  Simulation simulation(flags, 
+						MMSnow<MLS_APIC_Particle>(), 
+						QuadraticInterpolationKernel(), 
+						MLS_APIC_Scheme<QuadraticInterpolationKernel>(), 
+						MLS_APIC_Particle());
+  
+  
   ParticleWriter writer;
 
   Renderer renderer(flags.particle_count, flags.save_dir);

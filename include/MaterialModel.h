@@ -5,6 +5,7 @@
 #include "types.h"
 #include "linalg.h"
 
+template <class Particle>
 class MaterialModelBase {
 	
 public:
@@ -20,8 +21,8 @@ public:
 
 
 
-
-class MMFixedCorotated : public MaterialModelBase {
+template <class Particle>
+class MMFixedCorotated : public MaterialModelBase<Particle> {
 	
 public:
 	// lame parameters
@@ -46,16 +47,17 @@ public:
 	}
 };
 
+template <class Particle>
+class MMSnow : public MMFixedCorotated<Particle> {
 
-class MMSnow : public MMFixedCorotated 
-{
-	
+public:
 	real hardening;
 	
 public:
 	
 	MMSnow(real E = 1.0e5, real Nu = 0.3, real hardening = 10)
-	    : MMFixedCorotated(E, Nu), hardening(hardening)
+	    : MMFixedCorotated<Particle>(E, Nu), 
+	      hardening(hardening)
 	{}
 	
 	
@@ -64,8 +66,8 @@ public:
 		Mat R, S;
 		polar_decomposition(particle.F, R, S);
 		real e = std::exp(hardening * (1.0 - particle.Jp));
-		real mu = mu0 * e;
-		real lambda = lambda0 * e;
+		real mu = this->mu0 * e;
+		real lambda = this->lambda0 * e;
 		real const & J = particle.Jp;
 		return (2.0 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1.0) * J) * (particle.F.inverse().transpose());
 	}
