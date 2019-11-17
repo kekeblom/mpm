@@ -47,39 +47,33 @@ T square(const T& value) {
 
 template<class MaterialModel, class InterpolationKernel, class TransferScheme, class Particle>
 class Simulation {
-  private:
-	MaterialModel materialModel;
-	InterpolationKernel interpolationKernel;
-	
+  public:
+
 	SimulationParameters par;
     u32 & N = par.N;
     const u32 particle_count_target;
 
-  public:
     std::vector<Particle> particles;
     boost::multi_array<Vec4, 3> grid; // Velocity x, y, z, mass
+	
+	MaterialModel materialModel;
+	InterpolationKernel interpolationKernel;
 
-//<<<<<<< HEAD
-//    Simulation(const CLIOptions &opts) : flags(opts), N(opts.N), particle_count(opts.particle_count), grid(boost::extents[opts.N][opts.N][opts.N]) {
-//      u32 side = int(std::cbrt(particle_count));
-//      real start = opts.N / 3 * flags.dx;
-//      real random_size = opts.N / 3 * flags.dx;
-//=======
+
     Simulation(const CLIOptions &opts, 
 			   MaterialModel const & materialModel, 
 			   InterpolationKernel const & interpolationKernel,
 			   TransferScheme const & transferScheme_dummy,
 			   Particle const & particle_dummy) 
 		: par(opts.dt, opts.N),
-		  grid(boost::extents[par.N][par.N][par.N]), 
 		  particle_count_target(opts.particle_count),
+		  grid(boost::extents[par.N][par.N][par.N]), 
 		  materialModel(materialModel),
 		  interpolationKernel(interpolationKernel)
 	{
       u32 side = int(std::cbrt(particle_count_target));
       real start = opts.N / 3 * par.dx;
       real random_size = opts.N / 3 * par.dx;
-//>>>>>>> sduenser
       for (u32 i=0; i < side; i++) {
         for (u32 j=0; j < side; j++) {
           for (u32 k=0; k < side; k++) {
