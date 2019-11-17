@@ -26,14 +26,10 @@ const unsigned int FrameRate = 60;
 
 const real particle_mass = 1.0;
 const real particle_volume = 1.0;
-const real Gravity = -200.0;
+const real Gravity = -500.0;
 
+const int n_threads = 4;
 
-
-
-//real clamp(const real &number, const real &lower, const real &upper) {
-//  return std::max(std::min(number, upper), lower);
-//}
 
 float get_random() {
   return float(rand()) / float(RAND_MAX);
@@ -49,15 +45,11 @@ T square(const T& value) {
 
 
 
-
-
 template<class MaterialModel, class InterpolationKernel, class TransferScheme, class Particle>
 class Simulation {
   private:
 	MaterialModel materialModel;
 	InterpolationKernel interpolationKernel;
-	
-    const CLIOptions flags;
 	
 	SimulationParameters par;
     u32 & N = par.N;
@@ -72,17 +64,15 @@ class Simulation {
 			   InterpolationKernel const & interpolationKernel,
 			   TransferScheme const & transferScheme_dummy,
 			   Particle const & particle_dummy) 
-		: flags(opts), 
-		  par(opts.dt, opts.N),
-//		  N(opts.N), 
+		: par(opts.dt, opts.N),
 		  grid(boost::extents[par.N][par.N][par.N]), 
 		  particle_count_target(opts.particle_count),
 		  materialModel(materialModel),
 		  interpolationKernel(interpolationKernel)
 	{
       u32 side = int(std::cbrt(particle_count_target));
-      real start = opts.N / 3 * flags.dx;
-      real random_size = opts.N / 3 * flags.dx;
+      real start = opts.N / 3 * par.dx;
+      real random_size = opts.N / 3 * par.dx;
       for (u32 i=0; i < side; i++) {
         for (u32 j=0; j < side; j++) {
           for (u32 k=0; k < side; k++) {
@@ -96,15 +86,15 @@ class Simulation {
     }
 
     void resetGrid() {
-      #pragma omp parallel for
+      #pragma omp parallel for collapse(3) num_threads(n_threads) 
       for (u32 i=0; i < N; i++) {
         for (u32 j=0; j < N; j++) {
           for (u32 k=0; k < N; k++) {
-//            grid[i][j][k](0) = 0;
-//            grid[i][j][k](1) = 0;
-//            grid[i][j][k](2) = 0;
-//            grid[i][j][k](3) = 0.0;
-			  grid[i][j][k] = Vec4::Constant(0.0);
+            grid[i][j][k](0) = 0;
+            grid[i][j][k](1) = 0;
+            grid[i][j][k](2) = 0;
+            grid[i][j][k](3) = 0.0;
+//			  grid[i][j][k] = Vec4::Constant(0.0);
           }
         }
       }
@@ -134,7 +124,7 @@ class Simulation {
   void particleToGridTransfer() {
     // Particle-to-grid.
 	
-	#pragma omp parallel
+	#pragma omp parallel for num_threads(n_threads)
 	for (u32 pi = 0; pi < particles.size(); ++pi) {
 	  Particle & particle = particles[pi];
 	  
@@ -170,6 +160,7 @@ class Simulation {
 				  dist_part2node(2) = k_glob * par.dx - particle.x(2);
 				  
 				  Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, dist_part2node, particle_mass, i, j, k);
+				  
 				  for(int idx = 0; idx < 4; ++idx) {
 					  #pragma omp atomic
 					  grid[i_glob][j_glob][k_glob](idx) += node_contribution(idx);
@@ -188,7 +179,7 @@ class Simulation {
 
   void gridOperations() {
     // Grid operations.
-    #pragma omp parallel for
+    #pragma omp parallel for collapse(3) num_threads(n_threads)
     for (size_t i = 0; i < N; i++) {
       for (size_t j = 0; j < N; j++) {
         for (size_t k = 0; k < N; k++) {
@@ -226,7 +217,7 @@ class Simulation {
 
   void gridToParticleTransfer() {
     // Grid-to-particle.
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(n_threads)
     for (u32 pi = 0; pi < particles.size(); ++pi) {
       Particle & particle = particles[pi];
 		

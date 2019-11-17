@@ -4,10 +4,10 @@
 
 using real = float;
 using u8 = uint8_t;
-using u32 = unsigned int;
-using u64 = unsigned long;
-using i32 = int;
-using i64 = long;
+using u32 = uint32_t;//unsigned int;
+using u64 = uint64_t;//unsigned long;
+using i32 = int32_t;//int;
+using i64 = int64_t;//long;
 using f32 = float;
 using f64 = double;
 
@@ -17,26 +17,13 @@ using Mat = Eigen::Matrix<real, 3, 3>;
 using Vec4 = Eigen::Matrix<real, 4, 1>;
 
 using Veci = Eigen::Matrix<int, 3, 1>;
-using VecU32 = Eigen::Matrix<u32, 3, 1>;
+using Vecu32 = Eigen::Matrix<u32, 3, 1>;
 
-// moved to TransferScheme.h
-//struct Particle {
-//  Vec x; // Position.
-//  Vec v; // Velocity.
-//  Mat F; // Deformation gradient.
-//  Mat C; // Affine momentum.
-//  real Jp; // Determinant of the deformation gradient.
-//  Particle(Vec &x, Vec v = Vec::Zero()) :
-//    x(x[0], x[1], x[2]),
-//    v(v[0], v[1], v[2]),
-//    F(Mat::Identity()),
-//    C(Mat::Zero()),
-//    Jp(1.0)
-//    {}
-//};
 
-class ParticleBase {
-public:
+struct ParticleBase {
+	// minimal form of particle.
+	// Extended particle types needed for more elaborate transfer schemes would derive from here.
+	
 	Vec x; // Position.
     Vec v; // Velocity.
 	Mat F; // Deformation gradient.

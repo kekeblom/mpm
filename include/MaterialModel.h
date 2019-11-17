@@ -17,11 +17,12 @@ inline real clamp(const real &number, const real &lower, const real &upper) {
 template <class Particle>
 class MaterialModelBase {
 	
+	
 public:
 	
-	// should be contained in every material model:
+	// These should be implemented for every material model:
 	Mat computePF(Particle const & particle) const;	// couchy stress, i.e. partial_Psi/partial_F (Psi being the enerty)
-	void postStepModification(Particle & particle) const; // modify particle at end of step. Used to e.g. introduce plasticity
+	void endOfStepMutation(Particle & particle) const; // modify particle at end of step. Used to e.g. introduce plasticity
 	
 	
 public:
@@ -33,6 +34,9 @@ public:
 template <class Particle>
 class MMFixedCorotated : public MaterialModelBase<Particle> {
 	
+	// "Neo-hookean based" model trying to avoid "inverted elements" (det(F) < 0)
+	// [Stomakhin et al. 2012. Energetically Consistent Invertible Elasticity.]
+	
 public:
 	// lame parameters
 	real mu0;
@@ -40,7 +44,7 @@ public:
 
 public:
 	
-	MMFixedCorotated(real E = 1.0e5, real Nu = 0.3)
+	MMFixedCorotated(real E = 1.0e4, real Nu = 0.3)
 	{
 		mu0 = E / (2 * (1 + Nu));
 		lambda0 = E * Nu / ((1 + Nu) * (1 - 2 * Nu)); 
@@ -55,15 +59,19 @@ public:
 		return (2.0 * mu0 * (particle.F - R) * particle.F.transpose()) + lambda0 * ((J - 1.0) * J) * (particle.F.inverse().transpose());
 	}
 	
-	void endOfStepMutation(Particle & particle)
+	void endOfStepMutation(Particle & particle) const
 	{
-		
+		// nothing to do here
 	}
 };
+
+
 
 template <class Particle>
 class MMSnow : public MMFixedCorotated<Particle> {
 
+	// adds plasticity and hardening
+	
 public:
 	real hardening;
 	
@@ -87,7 +95,7 @@ public:
 	}
 	
 	
-	void endOfStepMutation(Particle & particle)
+	void endOfStepMutation(Particle & particle) const
 	{
 		// plasticity
 		Mat & F = particle.F;

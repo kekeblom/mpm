@@ -12,18 +12,19 @@ public:
 	
 public:
 	
-
+	
 	static constexpr u32 size() {return N;}
 	static constexpr bool d_is_const() {return D_is_const;}
 	
-	
-	
+	// The following should be implemented for every material model:
 	Eigen::Matrix<real, 3, N> weights_per_direction(Vec const & x_particle, real dx_inv, Veci & range_begin) const;
 	
 	Eigen::Matrix<real, 3, 3> D_inv(Vec const & x_particle, Veci const & range_begin, Eigen::Matrix<real, 3, N> const & weights, real dx) const
 	{
 		// required for APIC.
-		// default definition. For some interpolation schemes this simplifies dramatically -> in that case, implement simplified version.
+		// default definition -> use if performance is not an issue.
+		// For some interpolation schemes this simplifies dramatically.
+		// If d_inv is constant, implement simplified version below.
 		
 		Eigen::Matrix<real, 3, 3> D = Eigen::Matrix<real, 3, 3>::Zero();
 		
@@ -49,9 +50,8 @@ public:
 		
 		return(D.inverse());
 	}
-	
-	// if d_inv is constant, implement this function
-	Mat D_inv(real dx_inv) const;
+	// if d_inv is constant, implement this simplified version
+	Mat D_inv_const(real dx_inv) const;
 	
 };
 
@@ -82,7 +82,7 @@ public:
 	}
 
 	
-	Mat D_inv(real dx_inv) const
+	Mat D_inv_const(real dx_inv) const
 	{
 		return Mat::Identity() * 4.0 * dx_inv * dx_inv;
 	}

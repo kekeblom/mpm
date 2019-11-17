@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CXX_EXTENSIONS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY bin)
 
-set(USE_OPENMP FALSE)
+set(USE_OPENMP TRUE)
 
 include(CMakePackageConfigHelpers)
 
