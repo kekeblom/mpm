@@ -21,8 +21,8 @@ find_package(OpenMP REQUIRED)
 find_package(Eigen3 3.3 REQUIRED)
 find_package(GTest REQUIRED)
 if(USE_OPENMP)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-	message("using openMP")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    message("using openMP")
 endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall")
@@ -35,17 +35,17 @@ link_directories(${LOCAL_LIB_DIR})
 set(COMMON_LIBRARIES ${OPENGL_gl_LIBRARY} glfw  Boost::filesystem ${PNG_LIBRARIES} ${CMAKE_DL_LIBS})
 
 if(USE_OPENMP)
-	set(COMMON_LIBRARIES ${COMMON_LIBRARIES} OpenMP::OpenMP_CXX)
+    set(COMMON_LIBRARIES ${COMMON_LIBRARIES} OpenMP::OpenMP_CXX)
 endif()
-	
-	
+
+
 # add Partio (if available)
 find_library(PARTIO partio PATH ${LOCAL_LIB_DIR})
 if(PARTIO)
-	set(COMMON_LIBRARIES ${COMMON_LIBRARIES} ${PARTIO})
-	set(PARTIO_AVAILABLE)
+    set(COMMON_LIBRARIES ${COMMON_LIBRARIES} ${PARTIO})
+    add_definitions(-DPARTIO_AVAILABLE)
 else()
-	message("Warnig: Partio library not found, will not be able to write particles to file.")
+    message("Warnig: Partio library not found, will not be able to write particles to file.")
 endif()
 
 target_link_libraries(mpm ${COMMON_LIBRARIES})
