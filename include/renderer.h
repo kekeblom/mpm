@@ -20,7 +20,7 @@ class Renderer {
 
     void createShaders();
     void createVertices();
-	template<class Particle>
+    template<class Particle>
     void setParticlePositions(const std::vector<Particle>&);
   public:
   Renderer(const u32, const std::string &);
