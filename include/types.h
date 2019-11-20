@@ -1,4 +1,4 @@
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #ifndef COMMON_TYPES
 #define COMMON_TYPES
 
@@ -21,17 +21,15 @@ using Vecu32 = Eigen::Matrix<u32, 3, 1>;
 
 
 struct ParticleBase {
-	// minimal form of particle.
-	// Extended particle types needed for more elaborate transfer schemes would derive from here.
-	
-	Vec x; // Position.
+    // minimal form of particle.
+    // Extended particle types needed for more elaborate transfer schemes would derive from here.
+
+    Vec x; // Position.
     Vec v; // Velocity.
-	Mat F; // Deformation gradient.
-	
-	ParticleBase(Vec x = Vec::Zero(), Vec v = Vec::Zero()) 
-	    : x(x), v(v),
-		  F(Mat::Identity())
-	{}
+    Mat F; // Deformation gradient.
+
+    ParticleBase(Vec x = Vec::Zero(), Vec v = Vec::Zero())
+	: x(x), v(v), F(Mat::Identity()) {}
 };
 
 
