@@ -4,17 +4,11 @@
 
 #include "types.h"
 
-
-
 class ParticleWriter {
-
   public:
   template<class Particle>
   void writeParticles(const std::string&, const std::vector<Particle>&);
 };
-
-
-
 
 template<class Particle>
 inline void ParticleWriter::writeParticles(const std::string& filepath, const std::vector<Particle>&particles) {

@@ -1,14 +1,12 @@
 #ifndef _TRANSFER_SCHEME_
 #define _TRANSFER_SCHEME_
 
-
 #include "types.h"
-
 
 struct SimulationParameters {
 
   // global parameters for the actual MPM simulation.
-  // (I seperated these from the CLIOptions to keep them as lean as possible. The idea beeing that the
+  // (I separated these from the CLIOptions to keep them as lean as possible. The idea beeing that the
   // CLIOptions can then be used and extended to handle arbitrarily complex user input.)
 
   // defining
@@ -29,11 +27,6 @@ struct SimulationParameters {
     dx_inv(1.0/dx)
   {}
 };
-
-
-
-
-
 
 // usage: one instance of this class for each particle
 class TransferSchemeBase {
