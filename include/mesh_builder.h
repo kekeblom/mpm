@@ -68,7 +68,7 @@ void MeshBuilder<Particle>::computeMesh(const std::string& filename) {
     Eigen::MatrixXd U;
     Eigen::MatrixXi G;
     Eigen::VectorXi J;
-    igl::decimate(V, F, 1000, U, G, J);
+    igl::decimate(V, F, flags.mesh_face_count, U, G, J);
     igl::writeOBJ(filename, U, G);
   } else {
     igl::writeOBJ(filename, V, F);
