@@ -266,7 +266,7 @@ int main(int argc, char *argv[]) {
 
   renderer.render(simulation.particles);
 
-  MeshBuilder mesher(simulation.particles, simulation.par, flags.mesh_grid);
+  MeshBuilder mesher(simulation.particles, simulation.par, flags, flags.mesh_grid);
 
   bool save = flags.save_dir != "";
   if (save) {

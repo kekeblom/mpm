@@ -14,6 +14,7 @@ struct CLIOptions {
 
   // Mesh builder parameters.
   u32 mesh_grid;
+  i32 mesh_face_count;
 
   CLIOptions(int argc, char *argv[]) {
     cxxopts::Options parser("Simulator", "MPM simulation.");
@@ -22,7 +23,8 @@ struct CLIOptions {
       ("N", "Grid dimensions", cxxopts::value<u32>()->default_value("60"))
       ("save-dir", "Where to save images", cxxopts::value<std::string>()->default_value(""))
       ("particle-count", "How many particles to simulate", cxxopts::value<u32>()->default_value("10000"))
-      ("mesh-grid", "Grid size for computing mesh", cxxopts::value<u32>()->default_value("25"));
+      ("mesh-grid", "Grid size for computing mesh", cxxopts::value<u32>()->default_value("25"))
+      ("mesh-face-count", "Approximate resulting mesh with x faces.", cxxopts::value<i32>()->default_value("-1"));
 
     try {
       auto flags = parser.parse(argc, argv);
@@ -33,6 +35,7 @@ struct CLIOptions {
       this->N_real = real(this->N);
       this->save_dir = flags["save-dir"].as<std::string>();
       this->mesh_grid = flags["mesh-grid"].as<u32>();
+      this->mesh_face_count = flags["mesh-face-count"].as<i32>();
     } catch (const cxxopts::OptionException &error) {
       std::cout << error.what() << std::endl;
       exit(1);
