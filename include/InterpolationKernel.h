@@ -29,16 +29,16 @@ public:
     Eigen::Matrix<real, 3, 3> D = Eigen::Matrix<real, 3, 3>::Zero();
 
     Vec diff_part2node;
-    for(u32 i = 0; i < size(); ++i) {
-      u32 i_glob = range_begin(0) + i;
+    for(int i = 0; i < size(); ++i) {
+      int i_glob = range_begin(0) + i;
       diff_part2node(0) = i_glob * dx - x_particle(0);
 
-      for(u32 j = 0; j < size(); ++j) {
-        u32 j_glob = range_begin(1) + j;
+      for(int j = 0; j < size(); ++j) {
+        int j_glob = range_begin(1) + j;
         diff_part2node(1) = j_glob * dx - x_particle(1);
 
-        for(u32 k = 0; k < size(); ++k) {
-          u32 k_glob = range_begin(2) + k;
+        for(int k = 0; k < size(); ++k) {
+          int k_glob = range_begin(2) + k;
           diff_part2node(2) = k_glob * dx - x_particle(2);
 
           real weight = weights(0, i) * weights(1, j) * weights(2, k);
@@ -88,10 +88,6 @@ public:
   }
 
 };
-
-
-
-
 
 
 
