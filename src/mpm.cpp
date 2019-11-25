@@ -24,7 +24,7 @@
 
 namespace fs = boost::filesystem;
 
-const unsigned int FrameRate = 60;
+const unsigned int FrameRate = 120;
 
 const real ParticleMass = 1.0;
 const real ParticleVolume = 1.0;
@@ -85,20 +85,6 @@ class Simulation {
           //grid[i][j][k] = Vec4::Constant(0.0);
         }
       }
-    }
-  }
-
-  real getWeight(real diff) {
-    if (0.0 <= diff && diff < 0.5) {
-      return 0.75 - diff * diff;
-    } else if (0.5 <= diff && diff < 1.5) {
-      auto inner = 1.5 - std::abs(diff);
-      return 0.5 * inner * inner;
-    } else if (1.5 <= diff) {
-      return 0.0;
-    } else {
-      assert(false);
-      return 0.0;
     }
   }
 
@@ -266,7 +252,7 @@ int main(int argc, char *argv[]) {
 
   renderer.render(simulation.particles);
 
-  MeshBuilder mesher(simulation.particles, simulation.par, flags, flags.mesh_grid);
+  MeshBuilder mesher(simulation.par, flags, flags.mesh_grid);
 
   bool save = flags.save_dir != "";
   if (save) {
@@ -289,7 +275,7 @@ int main(int argc, char *argv[]) {
     if (save && (i % save_every) == 0) {
       std::stringstream ss;
       ss << flags.save_dir << "/meshes/mesh_" << frame_id << ".obj";
-      mesher.computeMesh(ss.str());
+      mesher.computeMesh(ss.str(), simulation.particles);
       ss.str("");
       ss.clear();
       ss << flags.save_dir << "/particles/particles_" << frame_id << ".bgeo";

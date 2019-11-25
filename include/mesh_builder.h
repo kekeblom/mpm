@@ -9,31 +9,29 @@
 #include "TransferScheme.h"
 #include "InterpolationKernel.h"
 
-template <class Particle>
 class MeshBuilder {
   private:
-    const std::vector<Particle> particles;
     const SimulationParameters& params;
     const CLIOptions flags;
     const u32 VoxelGridSide;
   public:
-    MeshBuilder(const std::vector<Particle>&, const SimulationParameters&, const CLIOptions&, const u32);
+    MeshBuilder(const SimulationParameters&, const CLIOptions&, const u32);
 
-    void computeMesh(const std::string&);
+    template <class Particle>
+    void computeMesh(const std::string&, const std::vector<Particle>& particles);
 };
-
 
 
 template <class InterpolationKernel, class Particle>
 void fillVoxelGrid_weights(std::vector<Particle> const & particles, double dx, boost::multi_array<float, 3> & grid)
 {
   // comutes the sum of weights the particles contribute to the grid
-  
+
   InterpolationKernel interpolationKernel;
   u32 N1 =grid.shape()[0];
   u32 N2 =grid.shape()[1];
   u32 N3 =grid.shape()[2];
-  
+
   // set to zero
   for (u32 i=0; i < N1; i++) {
     for (u32 j=0; j < N2; j++) {
@@ -42,21 +40,21 @@ void fillVoxelGrid_weights(std::vector<Particle> const & particles, double dx, b
       }
     }
   }
-  
+
   for (u32 pi = 0; pi < particles.size(); ++pi) {
     Particle const & particle = particles[pi];
-    
+
     Eigen::Matrix<real, 3, InterpolationKernel::size()> weights;
     Veci range_begin;
     weights = interpolationKernel.weights_per_direction(particle.x, 1.0/dx, range_begin);
-    
+
     u32 i_begin = std::max(0, -range_begin(0));
     u32 j_begin = std::max(0, -range_begin(1));
     u32 k_begin = std::max(0, -range_begin(2));
     u32 i_end = std::min(interpolationKernel.size(), N1 - range_begin(0));
     u32 j_end = std::min(interpolationKernel.size(), N2 - range_begin(1));
     u32 k_end = std::min(interpolationKernel.size(), N3 - range_begin(2));
-    
+
     for(u32 i = i_begin; i < i_end; ++i) {
       u32 i_glob = range_begin(0) + i;
       for(u32 j = j_begin; j < j_end; ++j) {
@@ -69,9 +67,9 @@ void fillVoxelGrid_weights(std::vector<Particle> const & particles, double dx, b
         }
       }
     }
-    
+
   }
-  
+
 }
 
 template <class Particle>
@@ -80,7 +78,7 @@ void fillVoxelGrid_distance(std::vector<Particle> const & particles, real dx, re
   u32 N1 =grid.shape()[0];
   u32 N2 =grid.shape()[1];
   u32 N3 =grid.shape()[2];
-  
+
   // set to cutoff distance
   for (u32 i=0; i < N1; i++) {
     for (u32 j=0; j < N2; j++) {
@@ -89,13 +87,13 @@ void fillVoxelGrid_distance(std::vector<Particle> const & particles, real dx, re
       }
     }
   }
-  
+
   for (u32 pi = 0; pi < particles.size(); ++pi) {
     Particle const & particle = particles[pi];
-    
+
     real r_gridpoints = distance_cutoff / dx;
     Vec x_particle_gridpoints = particle.x / dx;
-    
+
     // Note: range_begin / end in absolute numbers, with respect to the grid
     Veci range_begin = (x_particle_gridpoints - Vec::Constant(r_gridpoints)).cast<int>();
     Veci range_end = (x_particle_gridpoints + Vec::Constant(r_gridpoints + 1.0)).cast<int>();
@@ -105,7 +103,7 @@ void fillVoxelGrid_distance(std::vector<Particle> const & particles, real dx, re
     u32 i_end = std::min(int(N1), range_end(0));
     u32 j_end = std::min(int(N2), range_end(1));
     u32 k_end = std::min(int(N3), range_end(2));
-    
+
     Vec x_node;
     for(u32 i = i_begin; i < i_end; ++i) {
       x_node(0) = i * dx;
@@ -118,9 +116,9 @@ void fillVoxelGrid_distance(std::vector<Particle> const & particles, real dx, re
         }
       }
     }
-    
+
   }
-  
+
 }
 
 
@@ -145,21 +143,20 @@ void fillVoxelGrid_binary(std::vector<Particle> const & particles, real voxel_dx
 
 
 
-template <class Particle>
-MeshBuilder<Particle>::MeshBuilder(const std::vector<Particle> &particles, const SimulationParameters& params, const CLIOptions& flags, const u32 grid_size)
-  : particles(particles), params(params), flags(flags), VoxelGridSide(grid_size) {}
+MeshBuilder::MeshBuilder(const SimulationParameters& params, const CLIOptions& flags, const u32 grid_size)
+  : params(params), flags(flags), VoxelGridSide(grid_size) {};
 
 template<class Particle>
-void MeshBuilder<Particle>::computeMesh(const std::string& filename) {
+void MeshBuilder::computeMesh(const std::string& filename, const std::vector<Particle>& particles) {
   double voxel_dx = params.N * params.dx / double(VoxelGridSide);
   boost::multi_array<float, 3> sdf(boost::extents[VoxelGridSide][VoxelGridSide][VoxelGridSide]);
 
   const int grid_side = int(VoxelGridSide);
-  
+
   //fillVoxelGrid_binary(particles, voxel_dx, VoxelGridSide, sdf);
   //fillVoxelGrid_weights<QuadraticInterpolationKernel>(particles, voxel_dx, sdf);
   fillVoxelGrid_distance(particles, voxel_dx, (flags.mesh_particle_radius+1)*voxel_dx, sdf);
-  
+
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
   const int point_count = std::pow(grid_side, 3);
@@ -178,7 +175,7 @@ void MeshBuilder<Particle>::computeMesh(const std::string& filename) {
   }
   igl::copyleft::marching_cubes(S, GV, grid_side, grid_side, grid_side, V, F);
   V = V * voxel_dx;
-  
+
   if (flags.mesh_face_count != -1) {
     Eigen::MatrixXd U;
     Eigen::MatrixXi G;
