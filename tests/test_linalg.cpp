@@ -1,4 +1,4 @@
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #include <cmath>
 #include "gtest/gtest.h"
 #include "types.h"

@@ -2,7 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <array>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Core>
 #include <assert.h>
 #include <boost/filesystem.hpp>
 #include <boost/multi_array.hpp>
@@ -13,52 +13,42 @@
 #include "linalg.h"
 #include "utils.h"
 #include "renderer.h"
+#include "types.h"
 
 #include "MaterialModel.h"
 #include "InterpolationKernel.h"
 #include "TransferScheme.h"
 
 #include "particle_writer.h"
+#include "mesh_builder.h"
 
 namespace fs = boost::filesystem;
 
-const unsigned int FrameRate = 60;
+const unsigned int FrameRate = 120;
 
-const real particle_mass = 1.0;
-const real particle_volume = 1.0;
-const real Gravity = -500.0;
-
-const int n_threads = 4;
-
+const real ParticleMass = 1.0;
+const real ParticleVolume = 1.0;
+const real Gravity = -9.81;
+const int NThreads = 8;
 
 float get_random() {
   return float(rand()) / float(RAND_MAX);
 }
 
-template <class T>
-T square(const T& value) {
-  return value * value;
-}
-
-
-
-
 template<class MaterialModel, class InterpolationKernel, class TransferScheme, class Particle>
 class Simulation {
   public:
-
-	SimulationParameters par;
+    SimulationParameters par;
     u32 & N = par.N;
     const u32 particle_count_target;
 
     std::vector<Particle> particles;
     boost::multi_array<Vec4, 3> grid; // Velocity x, y, z, mass
-	
-	MaterialModel materialModel;
-	InterpolationKernel interpolationKernel;
 
+    MaterialModel materialModel;
+    InterpolationKernel interpolationKernel;
 
-  Simulation(const CLIOptions &opts,
+    Simulation(const CLIOptions &opts,
              MaterialModel const & materialModel,
              InterpolationKernel const & interpolationKernel,
              TransferScheme const & transferScheme_dummy,
@@ -67,8 +57,7 @@ class Simulation {
       particle_count_target(opts.particle_count),
       grid(boost::extents[par.N][par.N][par.N]),
       materialModel(materialModel),
-      interpolationKernel(interpolationKernel)
-  {
+      interpolationKernel(interpolationKernel) {
       u32 side = int(std::cbrt(particle_count_target));
       real start = opts.N / 3 * par.dx;
       real random_size = opts.N / 3 * par.dx;
@@ -85,7 +74,7 @@ class Simulation {
     }
 
   void resetGrid() {
-    #pragma omp parallel for collapse(3) num_threads(n_threads)
+    #pragma omp parallel for collapse(3) num_threads(NThreads)
     for (u32 i=0; i < N; i++) {
       for (u32 j=0; j < N; j++) {
         for (u32 k=0; k < N; k++) {
@@ -99,20 +88,6 @@ class Simulation {
     }
   }
 
-  real getWeight(real diff) {
-    if (0.0 <= diff && diff < 0.5) {
-      return 0.75 - diff * diff;
-    } else if (0.5 <= diff && diff < 1.5) {
-      auto inner = 1.5 - std::abs(diff);
-      return 0.5 * inner * inner;
-    } else if (1.5 <= diff) {
-      return 0.0;
-    } else {
-      assert(false);
-      return 0.0;
-    }
-  }
-
   void advance() {
     resetGrid();
     particleToGridTransfer();
@@ -123,15 +98,15 @@ class Simulation {
   void particleToGridTransfer() {
     // Particle-to-grid.
 
-    #pragma omp parallel for num_threads(n_threads)
+    #pragma omp parallel for num_threads(NThreads)
     for (u32 pi = 0; pi < particles.size(); ++pi) {
       Particle & particle = particles[pi];
 
       TransferScheme transferScheme;
       transferScheme.p2g_prepare_particle(particle,
                                           par,
-                                          particle_volume,
-                                          particle_mass,
+                                          ParticleVolume,
+                                          ParticleMass,
                                           interpolationKernel,
                                           materialModel);
 
@@ -157,25 +132,21 @@ class Simulation {
             u32 k_glob = range_begin(2) + k;
             dist_part2node(2) = k_glob * par.dx - particle.x(2);
 
-            Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, dist_part2node, particle_mass, i, j, k);
+            Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, dist_part2node, ParticleMass, i, j, k);
 
             for(int idx = 0; idx < 4; ++idx) {
               #pragma omp atomic
               grid[i_glob][j_glob][k_glob](idx) += node_contribution(idx);
             }
-
           }
         }
       }
-
     }
-
-
   }
 
   void gridOperations() {
     // Grid operations.
-    #pragma omp parallel for collapse(3) num_threads(n_threads)
+    #pragma omp parallel for collapse(3) num_threads(NThreads)
     for (size_t i = 0; i < N; i++) {
       for (size_t j = 0; j < N; j++) {
         for (size_t k = 0; k < N; k++) {
@@ -213,7 +184,7 @@ class Simulation {
 
   void gridToParticleTransfer() {
     // Grid-to-particle.
-    #pragma omp parallel for num_threads(n_threads)
+    #pragma omp parallel for num_threads(NThreads)
     for (u32 pi = 0; pi < particles.size(); ++pi) {
       Particle & particle = particles[pi];
 
@@ -254,52 +225,63 @@ class Simulation {
           }
         }
       }
-      
-      transferScheme.g2p_finish_particle(particle,
-                                         par);
-      
+
+      transferScheme.g2p_finish_particle(particle, par);
+
       // plasticity
       materialModel.endOfStepMutation(particle);
-      
+
       // advection
       particle.x += par.dt * particle.v;
-      
-      
     }
   }
-  
-  
 };
 
 int main(int argc, char *argv[]) {
   CLIOptions flags(argc, argv);
-  
-  Simulation simulation(flags, 
-                        MMSnow<MLS_APIC_Particle>(), 
-                        QuadraticInterpolationKernel(), 
-                        MLS_APIC_Scheme<QuadraticInterpolationKernel>(), 
+
+  Simulation simulation(flags,
+                        MMSnow<MLS_APIC_Particle>(),
+                        QuadraticInterpolationKernel(),
+                        MLS_APIC_Scheme<QuadraticInterpolationKernel>(),
                         MLS_APIC_Particle());
-  
+
   ParticleWriter writer;
-  
+
   Renderer renderer(flags.particle_count, flags.save_dir);
-  
+
   renderer.render(simulation.particles);
-  
+
+  MeshBuilder mesher(simulation.par, flags, flags.mesh_grid);
+
   bool save = flags.save_dir != "";
   if (save) {
     fs::create_directory(flags.save_dir);
+    std::stringstream ss;
+    ss << flags.save_dir << "/meshes";
+    fs::create_directory(ss.str());
+    ss.str("");
+    ss.clear();
+    ss << flags.save_dir << "/particles";
+    fs::create_directory(ss.str());
   }
-  
+
+  u32 save_every = u32(1. / float(FrameRate) / flags.dt);
+  u32 frame_id = 0;
   for (unsigned int i = 0; i < 50000; i++) {
     std::cout << "Step " << i << "\r" << std::flush;
     simulation.advance();
     renderer.render(simulation.particles);
-    if (save) {
+    if (save && (i % save_every) == 0) {
       std::stringstream ss;
-      ss << flags.save_dir << "/particles_" << i << ".bgeo";
+      ss << flags.save_dir << "/meshes/mesh_" << frame_id << ".obj";
+      mesher.computeMesh(ss.str(), simulation.particles);
+      ss.str("");
+      ss.clear();
+      ss << flags.save_dir << "/particles/particles_" << frame_id << ".bgeo";
       std::string filepath = ss.str();
       writer.writeParticles(filepath, simulation.particles);
+      frame_id++;
     }
   }
 }
