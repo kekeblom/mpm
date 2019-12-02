@@ -8,6 +8,8 @@
 #include <boost/multi_array.hpp>
 #include <omp.h>
 #include <cmath>
+#include <igl/readOBJ.h>
+#include <igl/winding_number.h>
 
 #include "options.h"
 #include "linalg.h"
@@ -37,6 +39,62 @@ float get_random() {
 
 template<class MaterialModel, class InterpolationKernel, class TransferScheme, class Particle>
 class Simulation {
+  private:
+  std::pair<Eigen::MatrixXf, Eigen::MatrixXi> loadMesh(const std::string& filepath) {
+    Eigen::MatrixXf V;
+    Eigen::MatrixXi F;
+    igl::readOBJ(filepath, V, F);
+    float min = V.minCoeff();
+    V = (V.array() - min).matrix();
+    float max = V.maxCoeff() * 3;
+    V = V / max;
+    V = (0.3 + V.array()).matrix();
+    return std::make_pair(V, F);
+  };
+
+  void addParticles(const std::string& filepath) {
+    u32 count = 0;
+    auto mesh = loadMesh(filepath);
+    auto V = std::get<0>(mesh);
+    auto F = std::get<1>(mesh);
+    Eigen::MatrixXi W;
+    const u32 BatchSize = 2048;
+    Eigen::Matrix<float, BatchSize, 3> points;
+    Vec x;
+
+    int vertices = V.rows();
+    double min_x = V.block(0, 0, vertices, 1).minCoeff();
+    double max_x = V.block(0, 0, vertices, 1).maxCoeff();
+    double min_y = V.block(0, 1, vertices, 1).minCoeff();
+    double max_y = V.block(0, 1, vertices, 1).maxCoeff();
+    double min_z = V.block(0, 2, vertices, 1).minCoeff();
+    double max_z = V.block(0, 2, vertices, 1).maxCoeff();
+    double range_x = max_x - min_x;
+    double range_y = max_y - min_y;
+    double range_z = max_z - min_z;
+
+    while (count < particle_count_target) {
+      for (u32 i=0; i < BatchSize; i++) {
+        points(i, 0) = min_x + get_random() * range_x;
+        points(i, 1) = min_y + get_random() * range_y;
+        points(i, 2) = min_z + get_random() * range_z;
+      }
+      igl::winding_number(V, F, points, W);
+      for (u32 i=0; i < BatchSize; i++) {
+        if (W(i, 0) == 1) {
+          x(0) = points(i, 0);
+          x(1) = points(i, 1);
+          x(2) = points(i, 2);
+          particles.push_back(Particle(x));
+          count++;
+          if (count == particle_count_target) {
+            return;
+          }
+        }
+      }
+    }
+  }
+
   public:
     SimulationParameters par;
     u32 & N = par.N;
@@ -58,20 +116,10 @@ class Simulation {
       grid(boost::extents[par.N][par.N][par.N]),
       materialModel(materialModel),
       interpolationKernel(interpolationKernel) {
-      u32 side = int(std::cbrt(particle_count_target));
-      real start = opts.N / 3 * par.dx;
-      real random_size = opts.N / 3 * par.dx;
-      for (u32 i=0; i < side; i++) {
-        for (u32 j=0; j < side; j++) {
-          for (u32 k=0; k < side; k++) {
-            auto x = Vec(start + get_random() * random_size,
-                         start + get_random() * random_size,
-                         start + get_random() * random_size);
-            particles.push_back(Particle(x));
-          }
-        }
-      }
+        particles.reserve(opts.particle_count);
+        addParticles(opts.load_mesh);
     }
+
 
   void resetGrid() {
     #pragma omp parallel for collapse(3) num_threads(NThreads)
@@ -163,7 +211,6 @@ class Simulation {
             const real x = real(i) / N;
             const real y = real(j) / N;
             const real z = real(k) / N;
-
             if (x < boundary || x > 1-boundary || y > 1-boundary ||
                 z < boundary || z > 1-boundary) {
               cell = Vec4(0, 0, 0, cell[3]);
@@ -172,11 +219,6 @@ class Simulation {
               cell[1] = std::max(real(0.0), cell[1]);
             }
           }
-
-          // new velocity:
-          // explicit time integration: v^(n+1) = v
-
-
         }
       }
     }
