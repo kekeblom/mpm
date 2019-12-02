@@ -241,7 +241,7 @@ int main(int argc, char *argv[]) {
   CLIOptions flags(argc, argv);
 
   Simulation simulation(flags,
-                        MMSnow<MLS_APIC_Particle>(),
+                        MMJelly<MLS_APIC_Particle>(),
                         QuadraticInterpolationKernel(),
                         MLS_APIC_Scheme<QuadraticInterpolationKernel>(),
                         MLS_APIC_Particle());
