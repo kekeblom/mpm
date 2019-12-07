@@ -37,93 +37,42 @@ float get_random() {
   return float(rand()) / float(RAND_MAX);
 }
 
-template<class MaterialModel, class InterpolationKernel, class TransferScheme, class Particle>
+
+template<class MaterialModel, class Particle>
+struct SimObject
+{
+  SimObject(MaterialModel materialModel) : materialModel(materialModel) {}
+
+  std::vector<Particle> particles;
+  MaterialModel materialModel;
+};
+
+
+
+template<class MaterialModel, class TransferScheme, class Particle, class InterpolationKernel>
 class Simulation {
-  private:
-  std::pair<Eigen::MatrixXf, Eigen::MatrixXi> loadMesh(const std::string& filepath) {
-    Eigen::MatrixXf V;
-    Eigen::MatrixXi F;
-    igl::readOBJ(filepath, V, F);
-    float min = V.minCoeff();
-    V = (V.array() - min).matrix();
-    float max = V.maxCoeff() * 3;
-    V = V / max;
-    V = (0.3 + V.array()).matrix();
-    return std::make_pair(V, F);
-  }
 
-  void addParticles(const std::string& filepath, u32 particle_density) {
-    auto mesh = loadMesh(filepath);
-    auto V = std::get<0>(mesh);
-    auto F = std::get<1>(mesh);
-    Eigen::MatrixXi W;
-    const u32 BatchSize = 2048;
-    Eigen::Matrix<float, BatchSize, 3> points;
-    Vec x;
+public:
+  SimulationParameters par;
+  u32 & N = par.N;
 
-    int vertices = V.rows();
-    double min_x = V.block(0, 0, vertices, 1).minCoeff();
-    double max_x = V.block(0, 0, vertices, 1).maxCoeff();
-    double min_y = V.block(0, 1, vertices, 1).minCoeff();
-    double max_y = V.block(0, 1, vertices, 1).maxCoeff();
-    double min_z = V.block(0, 2, vertices, 1).minCoeff();
-    double max_z = V.block(0, 2, vertices, 1).maxCoeff();
-    double range_x = max_x - min_x;
-    double range_y = max_y - min_y;
-    double range_z = max_z - min_z;
+  using SimObjectType = SimObject<MaterialModel, Particle>;
+  std::vector<SimObjectType> objects;
 
-    double volume_bounding_box = range_x * range_y * range_z;
-    u32 particle_count_target = particle_density * volume_bounding_box;
+  boost::multi_array<Vec4, 3> grid; // Velocity x, y, z, mass
 
-    u32 count_tot = 0;
-    while (count_tot < particle_count_target) {
-      for (u32 i=0; i < BatchSize; i++) {
-        points(i, 0) = min_x + get_random() * range_x;
-        points(i, 1) = min_y + get_random() * range_y;
-        points(i, 2) = min_z + get_random() * range_z;
-      }
-      igl::winding_number(V, F, points, W);
-      for (u32 i=0; i < BatchSize; i++) {
-        count_tot++;
-        if (W(i, 0) == 1) {
-          x(0) = points(i, 0);
-          x(1) = points(i, 1);
-          x(2) = points(i, 2);
-          particles.push_back(Particle(x));
-        }
-        if (count_tot == particle_count_target) {
-          return;
-        }
-      }
-    }
-  }
+  InterpolationKernel interpolationKernel;
 
-  public:
-    SimulationParameters par;
-    u32 & N = par.N;
-    const u32 particle_count_target;
+private:
+  std::vector<Particle> particles_all;  // used to accumulate all particles of the simulation, for simplified (but inefficient) access.
 
-    std::vector<Particle> particles;
-    boost::multi_array<Vec4, 3> grid; // Velocity x, y, z, mass
-
-    MaterialModel materialModel;
-    InterpolationKernel interpolationKernel;
-
-    Simulation(const CLIOptions &opts,
-             MaterialModel const & materialModel,
-             InterpolationKernel const & interpolationKernel,
-             TransferScheme const & transferScheme_dummy,
-             Particle const & particle_dummy)
+public:
+  Simulation(const CLIOptions &opts,
+             InterpolationKernel const & interpolationKernel)
     : par(opts.dt, opts.N),
-      particle_count_target(opts.particle_count),
       grid(boost::extents[par.N][par.N][par.N]),
-      materialModel(materialModel),
       interpolationKernel(interpolationKernel)
-    {
-        particles.reserve(opts.particle_count / 27);
-        addParticles(opts.load_mesh, opts.particle_count);
-    }
-
+  {}
 
   void resetGrid() {
     #pragma omp parallel for collapse(3) num_threads(NThreads)
@@ -142,62 +91,66 @@ class Simulation {
 
   void advance() {
     resetGrid();
-    particleToGridTransfer();
+    particleToGridTransfer(objects);
     gridOperations();
-    gridToParticleTransfer();
+    gridToParticleTransfer(objects);
   }
 
-  void particleToGridTransfer() {
+  template<class SimObjectType>
+  void particleToGridTransfer(std::vector<SimObjectType> & objects) {
     // Particle-to-grid.
+    for(SimObjectType & object : objects) {
+      auto & particles = object.particles;
+      auto & materialModel = object.materialModel;
+      #pragma omp parallel for num_threads(NThreads)
+      for (u32 pi = 0; pi < particles.size(); ++pi) {
+        Particle & particle = particles[pi];
 
-    #pragma omp parallel for num_threads(NThreads)
-    for (u32 pi = 0; pi < particles.size(); ++pi) {
-      Particle & particle = particles[pi];
+        TransferScheme transferScheme;
+        transferScheme.p2g_prepare_particle(particle,
+                                            par,
+                                            interpolationKernel,
+                                            materialModel);
 
-      TransferScheme transferScheme;
-      transferScheme.p2g_prepare_particle(particle,
-                                          par,
-                                          interpolationKernel,
-                                          materialModel);
+        Veci range_begin = transferScheme.get_range_begin();
 
-      Veci range_begin = transferScheme.get_range_begin();
-
-      bool out_of_range = false;
-      for(int i = 0; i < 3; ++i) {
-        if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= grid.shape()[i]) {
-          out_of_range = true;
-          break;
+        bool out_of_range = false;
+        for(int i = 0; i < 3; ++i) {
+          if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= grid.shape()[i]) {
+            out_of_range = true;
+            break;
+          }
         }
-      }
-      if(out_of_range) {
-        continue;
-      }
+        if(out_of_range) {
+          continue;
+        }
 
-      Vec dist_part2node;
-      u32 i_begin = std::max(0, -range_begin(0));
-      u32 j_begin = std::max(0, -range_begin(1));
-      u32 k_begin = std::max(0, -range_begin(2));
-      u32 i_end = std::min(interpolationKernel.size(), u32(grid.shape()[0]) - range_begin(0));
-      u32 j_end = std::min(interpolationKernel.size(), u32(grid.shape()[1]) - range_begin(1));
-      u32 k_end = std::min(interpolationKernel.size(), u32(grid.shape()[2]) - range_begin(2));
+        Vec dist_part2node;
+        u32 i_begin = std::max(0, -range_begin(0));
+        u32 j_begin = std::max(0, -range_begin(1));
+        u32 k_begin = std::max(0, -range_begin(2));
+        u32 i_end = std::min(interpolationKernel.size(), u32(grid.shape()[0]) - range_begin(0));
+        u32 j_end = std::min(interpolationKernel.size(), u32(grid.shape()[1]) - range_begin(1));
+        u32 k_end = std::min(interpolationKernel.size(), u32(grid.shape()[2]) - range_begin(2));
 
-      for(u32 i = i_begin; i < i_end; ++i) {
-        u32 i_glob = range_begin(0) + i;
-        dist_part2node(0) = i_glob * par.dx - particle.x(0);
+        for(u32 i = i_begin; i < i_end; ++i) {
+          u32 i_glob = range_begin(0) + i;
+          dist_part2node(0) = i_glob * par.dx - particle.x(0);
 
-        for(u32 j = j_begin; j < j_end; ++j) {
-          u32 j_glob = range_begin(1) + j;
-          dist_part2node(1) = j_glob * par.dx - particle.x(1);
+          for(u32 j = j_begin; j < j_end; ++j) {
+            u32 j_glob = range_begin(1) + j;
+            dist_part2node(1) = j_glob * par.dx - particle.x(1);
 
-          for(u32 k = k_begin; k < k_end; ++k) {
-            u32 k_glob = range_begin(2) + k;
-            dist_part2node(2) = k_glob * par.dx - particle.x(2);
+            for(u32 k = k_begin; k < k_end; ++k) {
+              u32 k_glob = range_begin(2) + k;
+              dist_part2node(2) = k_glob * par.dx - particle.x(2);
 
-            Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, dist_part2node, materialModel.particleMass, i, j, k);
+              Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, dist_part2node, materialModel.particleMass, i, j, k);
 
-            for(int idx = 0; idx < 4; ++idx) {
-              #pragma omp atomic
-              grid[i_glob][j_glob][k_glob](idx) += node_contribution(idx);
+              for(int idx = 0; idx < 4; ++idx) {
+                #pragma omp atomic
+                grid[i_glob][j_glob][k_glob](idx) += node_contribution(idx);
+              }
             }
           }
         }
@@ -237,86 +190,223 @@ class Simulation {
     }
   }
 
-  void gridToParticleTransfer() {
+  template<class SimObjectType>
+  void gridToParticleTransfer(std::vector<SimObjectType> & objects) {
     // Grid-to-particle.
-    #pragma omp parallel for num_threads(NThreads)
-    for (u32 pi = 0; pi < particles.size(); ++pi) {
-      Particle & particle = particles[pi];
+    for(SimObjectType & object : objects) {
+      auto & particles = object.particles;
+      auto & materialModel = object.materialModel;
+      #pragma omp parallel for num_threads(NThreads)
+      for (u32 pi = 0; pi < particles.size(); ++pi) {
+        Particle & particle = particles[pi];
 
-      TransferScheme transferScheme;
-      transferScheme.g2p_prepare_particle(particle,
-                                          par,
-                                          interpolationKernel);
+        TransferScheme transferScheme;
+        transferScheme.g2p_prepare_particle(particle,
+                                            par,
+                                            interpolationKernel);
 
-      Veci range_begin = transferScheme.get_range_begin();
+        Veci range_begin = transferScheme.get_range_begin();
 
-      bool out_of_range = false;
-      for(int i = 0; i < 3; ++i) {
-        if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= grid.shape()[i]) {
-          out_of_range = true;
-          break;
-        }
-      }
-      if(out_of_range) {
-        continue;
-      }
-
-
-      Vec dist_part2node;
-      u32 i_begin = std::max(0, -range_begin(0));
-      u32 j_begin = std::max(0, -range_begin(1));
-      u32 k_begin = std::max(0, -range_begin(2));
-      u32 i_end = std::min(interpolationKernel.size(), u32(grid.shape()[0]) - range_begin(0));
-      u32 j_end = std::min(interpolationKernel.size(), u32(grid.shape()[1]) - range_begin(1));
-      u32 k_end = std::min(interpolationKernel.size(), u32(grid.shape()[2]) - range_begin(2));
-
-      for(u32 i = i_begin; i < i_end; ++i) {
-        u32 i_glob = range_begin(0) + i;
-        dist_part2node(0) = i_glob * par.dx - particle.x(0);
-
-        for(u32 j = j_begin; j < j_end; ++j) {
-          u32 j_glob = range_begin(1) + j;
-          dist_part2node(1) = j_glob * par.dx - particle.x(1);
-
-          for(u32 k = k_begin; k < k_end; ++k) {
-            u32 k_glob = range_begin(2) + k;
-            dist_part2node(2) = k_glob * par.dx - particle.x(2);
-
-            // actual transfer
-            // velocity
-            transferScheme.g2p_node_contribution(particle,
-                                                 dist_part2node,
-                                                 grid[i_glob][j_glob][k_glob],
-                                                 i, j, k);
+        bool out_of_range = false;
+        for(int i = 0; i < 3; ++i) {
+          if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= grid.shape()[i]) {
+            out_of_range = true;
+            break;
           }
         }
+        if(out_of_range) {
+          continue;
+        }
+
+        Vec dist_part2node;
+        u32 i_begin = std::max(0, -range_begin(0));
+        u32 j_begin = std::max(0, -range_begin(1));
+        u32 k_begin = std::max(0, -range_begin(2));
+        u32 i_end = std::min(interpolationKernel.size(), u32(grid.shape()[0]) - range_begin(0));
+        u32 j_end = std::min(interpolationKernel.size(), u32(grid.shape()[1]) - range_begin(1));
+        u32 k_end = std::min(interpolationKernel.size(), u32(grid.shape()[2]) - range_begin(2));
+
+        for(u32 i = i_begin; i < i_end; ++i) {
+          u32 i_glob = range_begin(0) + i;
+          dist_part2node(0) = i_glob * par.dx - particle.x(0);
+
+          for(u32 j = j_begin; j < j_end; ++j) {
+            u32 j_glob = range_begin(1) + j;
+            dist_part2node(1) = j_glob * par.dx - particle.x(1);
+
+            for(u32 k = k_begin; k < k_end; ++k) {
+              u32 k_glob = range_begin(2) + k;
+              dist_part2node(2) = k_glob * par.dx - particle.x(2);
+
+              // actual transfer
+              // velocity
+              transferScheme.g2p_node_contribution(particle,
+                                                   dist_part2node,
+                                                   grid[i_glob][j_glob][k_glob],
+                                                   i, j, k);
+            }
+          }
+        }
+
+        transferScheme.g2p_finish_particle(particle, par);
+
+        // plasticity
+        materialModel.endOfStepMutation(particle);
+
+        // advection
+        particle.x += par.dt * particle.v;
       }
-
-      transferScheme.g2p_finish_particle(particle, par);
-
-      // plasticity
-      materialModel.endOfStepMutation(particle);
-
-      // advection
-      particle.x += par.dt * particle.v;
     }
   }
+
+  void addObject(std::string const & filepath,  // obj file defining the shape of the object
+                 MaterialModel materialModel,
+                 real size,                     // size of the object, measured as the longest edge of the bounding box
+                 Vec position,                  // position of the object within the scene (lowest corner of object)
+                 Vec velocity)                  // initial velocity of the object
+  {
+    auto mesh = loadMesh(filepath, size, position);
+
+    objects.push_back(SimObjectType(materialModel));
+    addParticles(mesh,
+                 u32(1.0 / materialModel.particleVolume),
+                 velocity,
+                 objects.back().particles);
+  }
+
+  size_t getParticleCount()
+  {
+    size_t n = 0;
+    for(auto & object : objects) {
+      n += object.particles.size();
+    }
+    return n;
+  }
+
+  std::vector<Particle> & getFullParticleList()
+  {
+    particles_all.resize(0);
+    for(auto & object : objects) {
+      particles_all.insert(particles_all.end(), object.particles.begin(), object.particles.end());
+    }
+    return particles_all;
+  }
+
+
+private:
+
+  std::pair<Eigen::MatrixXf, Eigen::MatrixXi> loadMesh(const std::string& filepath, double size, Vec position) {
+    Eigen::MatrixXf V;
+    Eigen::MatrixXi F;
+    igl::readOBJ(filepath, V, F);
+
+    Vec min = V.colwise().minCoeff();
+    Vec max = V.colwise().maxCoeff();
+    real length_max = (max - min).maxCoeff();
+    real scale = size / length_max;
+
+    V.array() *= scale;
+    V.rowwise() += position.transpose() - scale * min.transpose();
+
+    return std::make_pair(V, F);
+  }
+
+  void addParticles(std::pair<Eigen::MatrixXf, Eigen::MatrixXi> const & mesh,
+                    u32 particle_density,
+                    Vec velocity,
+                    std::vector<Particle> & particles)
+  {
+    auto V = std::get<0>(mesh);
+    auto F = std::get<1>(mesh);
+    Eigen::MatrixXi W;
+    const u32 BatchSize = 2048;
+    Eigen::Matrix<float, BatchSize, 3> points;
+    Vec x;
+
+    int vertices = V.rows();
+    double min_x = V.block(0, 0, vertices, 1).minCoeff();
+    double max_x = V.block(0, 0, vertices, 1).maxCoeff();
+    double min_y = V.block(0, 1, vertices, 1).minCoeff();
+    double max_y = V.block(0, 1, vertices, 1).maxCoeff();
+    double min_z = V.block(0, 2, vertices, 1).minCoeff();
+    double max_z = V.block(0, 2, vertices, 1).maxCoeff();
+    double range_x = max_x - min_x;
+    double range_y = max_y - min_y;
+    double range_z = max_z - min_z;
+
+    double volume_bounding_box = range_x * range_y * range_z;
+    u32 particle_count_target = particle_density * volume_bounding_box;
+
+    u32 count_tot = 0;
+    while (count_tot < particle_count_target) {
+      for (u32 i=0; i < BatchSize; i++) {
+        points(i, 0) = min_x + get_random() * range_x;
+        points(i, 1) = min_y + get_random() * range_y;
+        points(i, 2) = min_z + get_random() * range_z;
+      }
+      igl::winding_number(V, F, points, W);
+      for (u32 i=0; i < BatchSize; i++) {
+        count_tot++;
+        if (W(i, 0) == 1) {
+          x(0) = points(i, 0);
+          x(1) = points(i, 1);
+          x(2) = points(i, 2);
+          particles.push_back(Particle(x, velocity));
+        }
+        if (count_tot == particle_count_target) {
+          return;
+        }
+      }
+    }
+  }
+
+
 };
 
 int main(int argc, char *argv[]) {
   CLIOptions flags(argc, argv);
 
-  Simulation simulation(flags,
-                        MMSnow<MLS_APIC_Particle>(1.0 / flags.particle_count),
-                        QuadraticInterpolationKernel(),
-                        MLS_APIC_Scheme<QuadraticInterpolationKernel>(),
-                        MLS_APIC_Particle());
+
+  using ParticleType = MLS_APIC_Particle;
+  using MaterialModel = MMSnow<ParticleType>;
+  using InterpolationKernel = QuadraticInterpolationKernel;
+  using TransferScheme = MLS_APIC_Scheme<InterpolationKernel>;
+
+  Simulation<MaterialModel,
+             TransferScheme,
+             ParticleType,
+             InterpolationKernel> simulation(flags, InterpolationKernel());
+
+  // crate objects to simulate
+  simulation.addObject(flags.load_mesh,
+                       MaterialModel(1.0/flags.particle_count, 400, 1.4e5, 0.2, 10, 1.0-1e-2, 1.0+3e-3),  // soft, light snow
+                       0.3,
+                       Vec(0.3, 0.6, 0.3),
+                       Vec(0.0,0.0,0.0));
+
+  simulation.addObject(flags.load_mesh,
+                       MaterialModel(1.0/flags.particle_count, 700, 1.4e5, 0.2, 10, 1.0-5e-2, 1.0+1.5e-2),  // harder, heavier snow
+                       0.2,
+                       Vec(0.35, 0.1, 0.3),
+                       Vec(0.0,5.0,0.0));
+
+//  simulation.addObject(flags.load_mesh,
+//                       MaterialModel(1.0/flags.particle_count, 400, 1.4e5, 0.2, 0, 0.0, 1.0e30),  // "Jelly", by abuse of the snow material model
+//                       0.3,
+//                       Vec(0.3, 0.6, 0.3),
+//                       Vec(0.0,0.0,0.0));
+
+//  simulation.addObject(flags.load_mesh,
+//                       MaterialModel(1.0/flags.particle_count, 1000, 1.4e5, 0.45, 0, 0.97, 0.97), // "Fluid"????
+//                       0.5,
+//                       Vec(0.25, 0.4, 0.25),
+//                       Vec(0.0,0.0,0.0));
 
   ParticleWriter writer;
 
-  Renderer renderer(flags.particle_count, flags.save_dir);
+  Renderer renderer(simulation.getParticleCount(), flags.save_dir);
 
-  renderer.render(simulation.particles);
+  renderer.render(simulation.getFullParticleList());
 
   MeshBuilder mesher(simulation.par, flags, flags.mesh_grid);
 
@@ -337,16 +427,18 @@ int main(int argc, char *argv[]) {
   for (unsigned int i = 0; i < std::numeric_limits<unsigned int>::max(); i++) {
     std::cout << "Step " << i << "\r" << std::flush;
     simulation.advance();
-    renderer.render(simulation.particles);
+    if(i%20 == 0) {
+      renderer.render(simulation.getFullParticleList());
+    }
     if (save && (i % save_every) == 0) {
       std::stringstream ss;
       ss << flags.save_dir << "/meshes/mesh_" << frame_id << ".obj";
-      mesher.computeMesh(ss.str(), simulation.particles);
+      mesher.computeMesh(ss.str(), simulation.getFullParticleList());
       ss.str("");
       ss.clear();
       ss << flags.save_dir << "/particles/particles_" << frame_id << ".bgeo";
       std::string filepath = ss.str();
-      writer.writeParticles(filepath, simulation.particles);
+      writer.writeParticles(filepath, simulation.getFullParticleList());
       frame_id++;
     }
   }

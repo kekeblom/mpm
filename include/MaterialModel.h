@@ -84,10 +84,12 @@ public:
 
 public:
 
-  MMSnow(real volume, real density = 400,
-         real E = 1.4e5, real Nu = 0.2,
-         real hardening = 10,
-         real plast_clamp_lower = 1.0-2.5e-2, real plast_clamp_higher = 1.0+7.5e-3)
+  MMSnow(real volume,         // particle volume, defined by sampling density of the particles
+         real density = 400,  //
+         real E = 1.4e5,      // Youngs modulus
+         real Nu = 0.2,       // Poisson ratio
+         real hardening = 10, // snow "hardens" when under pressure. Set 0 to achieve Neo-hookean behaviour
+         real plast_clamp_lower = 1.0-2.5e-2, real plast_clamp_higher = 1.0+7.5e-3) // These define the plasticity: the closer both are to 1, the more plasticity there is. Set to 0.0 and std::numeric_limits<real>::max() fully elastic material.
     : MMFixedCorotated<Particle>(volume, density, E, Nu),
       hardening(hardening),
       plast_clamp_lower(plast_clamp_lower),

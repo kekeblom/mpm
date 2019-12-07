@@ -24,9 +24,9 @@ struct CLIOptions {
       ("dt", "Physics simulation time-step", cxxopts::value<float>()->default_value("1e-4"))
       ("N", "Grid dimensions", cxxopts::value<u32>()->default_value("60"))
       ("save-dir", "Where to save images", cxxopts::value<std::string>()->default_value(""))
-      ("particle-count", "Particle density (i.e. number of particles per unit cube)", cxxopts::value<u32>()->default_value("370000"))
+      ("particle-count", "Particle density (i.e. number of particles per unit cube)", cxxopts::value<u32>()->default_value("500000"))
       ("load-mesh", "Mesh of object to simulate", cxxopts::value<std::string>()->default_value("../meshes/cube.obj"))
-      ("mesh-grid", "Grid size for computing mesh", cxxopts::value<u32>()->default_value("150"))
+      ("mesh-grid", "Grid size for computing mesh", cxxopts::value<u32>()->default_value("250"))
       ("mesh-particle-radius", "Particle radius for computeing the mesh (in grid points)", cxxopts::value<u32>()->default_value("5"))
       ("mesh-face-count", "Approximate resulting mesh with x faces.", cxxopts::value<i32>()->default_value("-1"));
 
