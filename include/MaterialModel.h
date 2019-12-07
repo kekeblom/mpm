@@ -16,8 +16,16 @@ class MaterialModelBase {
 
 public: //(private)
 
+  real particleVolume;
+  real particleMass;
 
 public:
+
+  MaterialModelBase(real volume, real density)
+    : particleVolume(volume)
+  {
+    particleMass = density * volume;
+  }
 
   // These should be implemented for every material model:
   Mat computePF(Particle const & particle) const;	// couchy stress, i.e. partial_Psi/partial_F (Psi being the enerty)
@@ -40,7 +48,8 @@ public:
 
 public:
 
-  MMFixedCorotated(real E = 1.0e4, real Nu = 0.3)
+  MMFixedCorotated(real volume, real density, real E, real Nu)
+    : MaterialModelBase<Particle>(volume, density)
   {
     mu0 = E / (2 * (1 + Nu));
     lambda0 = E * Nu / ((1 + Nu) * (1 - 2 * Nu));
@@ -70,12 +79,19 @@ class MMSnow : public MMFixedCorotated<Particle> {
 
 public:
   real hardening;
+  real plast_clamp_lower;
+  real plast_clamp_higher;
 
 public:
 
-  MMSnow(real E = 1.0e4, real Nu = 0.2, real hardening = 10)
-    : MMFixedCorotated<Particle>(E, Nu),
-      hardening(hardening)
+  MMSnow(real volume, real density = 400,
+         real E = 1.4e5, real Nu = 0.2,
+         real hardening = 10,
+         real plast_clamp_lower = 1.0-2.5e-2, real plast_clamp_higher = 1.0+7.5e-3)
+    : MMFixedCorotated<Particle>(volume, density, E, Nu),
+      hardening(hardening),
+      plast_clamp_lower(plast_clamp_lower),
+      plast_clamp_higher(plast_clamp_higher)
   {}
 
 
@@ -100,8 +116,8 @@ public:
     Mat sigma = svd.singularValues().asDiagonal();
     Mat U = svd.matrixU();
     Mat V = svd.matrixV();
-    for (size_t i = 0; i < 2; i++) {
-      sigma(i, i) = clamp(sigma(i, i), 1.0 - 2.5e-2, 1.0 + 7.5e-3);
+    for (size_t i = 0; i < 3; i++) {
+      sigma(i, i) = clamp(sigma(i, i), plast_clamp_lower, plast_clamp_higher);
     }
 
     real oldJ = F.determinant();
@@ -124,8 +140,8 @@ public:
 
 public:
 
-  MMJelly(real E = 1.0e3, real Nu = 0.3, real hardening = 10)
-    : MMFixedCorotated<Particle>(E, Nu),
+  MMJelly(real volume, real density = 1000, real E = 1.0e5, real Nu = 0.3, real hardening = 10)
+    : MMFixedCorotated<Particle>(volume, density, E, Nu),
       hardening(hardening)
   {}
 

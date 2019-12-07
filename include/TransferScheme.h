@@ -79,8 +79,6 @@ public:
   template<class MaterialModel>
   void p2g_prepare_particle(MLS_APIC_Particle const & particle,
                             SimulationParameters const & par,
-                            real particle_volume,
-                            real particle_mass,
                             InterpolationKernel const & interpolationKernel,
                             MaterialModel const & materialModel)
   {
@@ -98,9 +96,9 @@ public:
     Mat PF = materialModel.computePF(particle);
 
     // Cauchy stress times dt and inv_dx
-    Mat stress = -Dinv * par.dt * particle_volume * PF * particle.F.transpose();
+    Mat stress = -Dinv * par.dt * materialModel.particleVolume * PF * particle.F.transpose();
 
-    affine = stress + particle_mass * particle.C;
+    affine = stress + materialModel.particleMass * particle.C;
   }
 
 

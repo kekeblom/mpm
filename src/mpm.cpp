@@ -28,8 +28,8 @@ namespace fs = boost::filesystem;
 
 const unsigned int FrameRate = 120;
 
-const real ParticleMass = 1.0;
-const real ParticleVolume = 1.0;
+//const real ParticleMass = 1.0;
+//const real ParticleVolume = 1.0;
 const real Gravity = -9.81;
 const int NThreads = 8;
 
@@ -50,10 +50,9 @@ class Simulation {
     V = V / max;
     V = (0.3 + V.array()).matrix();
     return std::make_pair(V, F);
-  };
+  }
 
-  void addParticles(const std::string& filepath) {
-    u32 count = 0;
+  void addParticles(const std::string& filepath, u32 particle_density) {
     auto mesh = loadMesh(filepath);
     auto V = std::get<0>(mesh);
     auto F = std::get<1>(mesh);
@@ -73,7 +72,11 @@ class Simulation {
     double range_y = max_y - min_y;
     double range_z = max_z - min_z;
 
-    while (count < particle_count_target) {
+    double volume_bounding_box = range_x * range_y * range_z;
+    u32 particle_count_target = particle_density * volume_bounding_box;
+
+    u32 count_tot = 0;
+    while (count_tot < particle_count_target) {
       for (u32 i=0; i < BatchSize; i++) {
         points(i, 0) = min_x + get_random() * range_x;
         points(i, 1) = min_y + get_random() * range_y;
@@ -81,15 +84,15 @@ class Simulation {
       }
       igl::winding_number(V, F, points, W);
       for (u32 i=0; i < BatchSize; i++) {
+        count_tot++;
         if (W(i, 0) == 1) {
           x(0) = points(i, 0);
           x(1) = points(i, 1);
           x(2) = points(i, 2);
           particles.push_back(Particle(x));
-          count++;
-          if (count == particle_count_target) {
-            return;
-          }
+        }
+        if (count_tot == particle_count_target) {
+          return;
         }
       }
     }
@@ -115,9 +118,10 @@ class Simulation {
       particle_count_target(opts.particle_count),
       grid(boost::extents[par.N][par.N][par.N]),
       materialModel(materialModel),
-      interpolationKernel(interpolationKernel) {
-        particles.reserve(opts.particle_count);
-        addParticles(opts.load_mesh);
+      interpolationKernel(interpolationKernel)
+    {
+        particles.reserve(opts.particle_count / 27);
+        addParticles(opts.load_mesh, opts.particle_count);
     }
 
 
@@ -153,20 +157,29 @@ class Simulation {
       TransferScheme transferScheme;
       transferScheme.p2g_prepare_particle(particle,
                                           par,
-                                          ParticleVolume,
-                                          ParticleMass,
                                           interpolationKernel,
                                           materialModel);
 
       Veci range_begin = transferScheme.get_range_begin();
 
+      bool out_of_range = false;
+      for(int i = 0; i < 3; ++i) {
+        if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= grid.shape()[i]) {
+          out_of_range = true;
+          break;
+        }
+      }
+      if(out_of_range) {
+        continue;
+      }
+
       Vec dist_part2node;
       u32 i_begin = std::max(0, -range_begin(0));
       u32 j_begin = std::max(0, -range_begin(1));
       u32 k_begin = std::max(0, -range_begin(2));
-      u32 i_end = std::min(interpolationKernel.size(), par.N - range_begin(0));
-      u32 j_end = std::min(interpolationKernel.size(), par.N - range_begin(1));
-      u32 k_end = std::min(interpolationKernel.size(), par.N - range_begin(2));
+      u32 i_end = std::min(interpolationKernel.size(), u32(grid.shape()[0]) - range_begin(0));
+      u32 j_end = std::min(interpolationKernel.size(), u32(grid.shape()[1]) - range_begin(1));
+      u32 k_end = std::min(interpolationKernel.size(), u32(grid.shape()[2]) - range_begin(2));
 
       for(u32 i = i_begin; i < i_end; ++i) {
         u32 i_glob = range_begin(0) + i;
@@ -180,7 +193,7 @@ class Simulation {
             u32 k_glob = range_begin(2) + k;
             dist_part2node(2) = k_glob * par.dx - particle.x(2);
 
-            Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, dist_part2node, ParticleMass, i, j, k);
+            Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, dist_part2node, materialModel.particleMass, i, j, k);
 
             for(int idx = 0; idx < 4; ++idx) {
               #pragma omp atomic
@@ -237,14 +250,25 @@ class Simulation {
 
       Veci range_begin = transferScheme.get_range_begin();
 
+      bool out_of_range = false;
+      for(int i = 0; i < 3; ++i) {
+        if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= grid.shape()[i]) {
+          out_of_range = true;
+          break;
+        }
+      }
+      if(out_of_range) {
+        continue;
+      }
+
 
       Vec dist_part2node;
       u32 i_begin = std::max(0, -range_begin(0));
       u32 j_begin = std::max(0, -range_begin(1));
       u32 k_begin = std::max(0, -range_begin(2));
-      u32 i_end = std::min(interpolationKernel.size(), par.N - range_begin(0));
-      u32 j_end = std::min(interpolationKernel.size(), par.N - range_begin(1));
-      u32 k_end = std::min(interpolationKernel.size(), par.N - range_begin(2));
+      u32 i_end = std::min(interpolationKernel.size(), u32(grid.shape()[0]) - range_begin(0));
+      u32 j_end = std::min(interpolationKernel.size(), u32(grid.shape()[1]) - range_begin(1));
+      u32 k_end = std::min(interpolationKernel.size(), u32(grid.shape()[2]) - range_begin(2));
 
       for(u32 i = i_begin; i < i_end; ++i) {
         u32 i_glob = range_begin(0) + i;
@@ -283,7 +307,7 @@ int main(int argc, char *argv[]) {
   CLIOptions flags(argc, argv);
 
   Simulation simulation(flags,
-                        MMJelly<MLS_APIC_Particle>(),
+                        MMSnow<MLS_APIC_Particle>(1.0 / flags.particle_count),
                         QuadraticInterpolationKernel(),
                         MLS_APIC_Scheme<QuadraticInterpolationKernel>(),
                         MLS_APIC_Particle());
@@ -310,7 +334,7 @@ int main(int argc, char *argv[]) {
 
   u32 save_every = u32(1. / float(FrameRate) / flags.dt);
   u32 frame_id = 0;
-  for (unsigned int i = 0; i < 50000; i++) {
+  for (unsigned int i = 0; i < std::numeric_limits<unsigned int>::max(); i++) {
     std::cout << "Step " << i << "\r" << std::flush;
     simulation.advance();
     renderer.render(simulation.particles);
