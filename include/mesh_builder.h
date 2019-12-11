@@ -186,9 +186,11 @@ void MeshBuilder::computeMesh(const std::string& filename, const std::vector<Par
   igl::copyleft::marching_cubes(S, GV, grid_side, grid_side, grid_side, V, F);
   V = V * voxel_dx;
 
-  auto pair = smoothMesh(V, F);
-  V = std::get<0>(pair);
-  F = std::get<1>(pair);
+  if(flags.laplacian_smooth != 0) {
+    auto pair = smoothMesh(V, F);
+    V = std::get<0>(pair);
+    F = std::get<1>(pair);
+  }
 
   if (flags.mesh_face_count != -1) {
     Eigen::MatrixXd U;
