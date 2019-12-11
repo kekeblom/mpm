@@ -1,7 +1,12 @@
+#include <cassert>
 #include <boost/multi_array.hpp>
 #include <igl/copyleft/marching_cubes.h>
 #include <igl/writeOBJ.h>
 #include <igl/decimate.h>
+#include <igl/grad.h>
+#include <igl/cotmatrix.h>
+#include <igl/doublearea.h>
+#include <igl/massmatrix.h>
 #include <chrono>
 #include <omp.h>
 
@@ -14,11 +19,16 @@ class MeshBuilder {
     const SimulationParameters& params;
     const CLIOptions flags;
     const u32 VoxelGridSide;
+
+
   public:
     MeshBuilder(const SimulationParameters&, const CLIOptions&, const u32);
 
+
     template <class Particle>
     void computeMesh(const std::string&, const std::vector<Particle>& particles);
+
+    std::pair<Eigen::MatrixXd, Eigen::MatrixXi> smoothMesh(const Eigen::MatrixXd&, const Eigen::MatrixXi&);
 };
 
 
@@ -176,6 +186,10 @@ void MeshBuilder::computeMesh(const std::string& filename, const std::vector<Par
   igl::copyleft::marching_cubes(S, GV, grid_side, grid_side, grid_side, V, F);
   V = V * voxel_dx;
 
+  auto pair = smoothMesh(V, F);
+  V = std::get<0>(pair);
+  F = std::get<1>(pair);
+
   if (flags.mesh_face_count != -1) {
     Eigen::MatrixXd U;
     Eigen::MatrixXi G;
@@ -185,5 +199,40 @@ void MeshBuilder::computeMesh(const std::string& filename, const std::vector<Par
   } else {
     igl::writeOBJ(filename, V, F);
   }
+}
+
+std::pair<Eigen::MatrixXd, Eigen::MatrixXi> MeshBuilder::smoothMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F) {
+  Eigen::MatrixXd U = V;
+  Eigen::SparseMatrix<double> L, G, K;
+
+  igl::cotmatrix(V, F, L);
+
+  igl::grad(V, F, G);
+
+  Eigen::VectorXd double_area;
+  igl::doublearea(V, F, double_area);
+
+  const auto &T = 1. * (double_area.replicate(3, 1) * 0.5).asDiagonal();
+  K = -G.transpose() * T * G;
+
+  for (u32 i=0; i < 1; i++) {
+    Eigen::SparseMatrix<double> M;
+
+    igl::massmatrix(U, F, igl::MASSMATRIX_TYPE_BARYCENTRIC, M);
+    const auto& S = (M - 0.001 * L);
+    Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> solver(S);
+    assert(solver.info() == Eigen::Success);
+    U = solver.solve(M * U).eval();
+
+    igl::doublearea(U, F, double_area);
+
+    double area = 0.5 * double_area.sum();
+    Eigen::MatrixXd BC;
+    igl::barycenter(U, F, BC);
+
+    U.array() /= sqrt(area);
+  }
+
+  return std::make_pair(U, F);
 }
 
