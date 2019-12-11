@@ -61,7 +61,7 @@ public:
     Mat R, S;
     polar_decomposition(particle.F, R, S);
     real const & J = particle.Jp;
-    return (2.0 * mu0 * (particle.F - R) * particle.F.transpose()) + lambda0 * ((J - 1.0) * J) * (particle.F.inverse().transpose());
+    return (2.0 * mu0 * (particle.F - R) * particle.F.transpose()) + lambda0 * ((J - 1.0) * J) * Mat::Identity();
   }
 
   void endOfStepMutation(Particle & particle) const
@@ -105,7 +105,7 @@ public:
     real mu = this->mu0 * e;
     real lambda = this->lambda0 * e;
     real const & J = particle.Jp;
-    return (2.0 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1.0) * J) * (particle.F.inverse().transpose());
+    return (2.0 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1.0) * J) * Mat::Identity();
   }
 
 
@@ -156,7 +156,7 @@ public:
     real mu = this->mu0 * e;
     real lambda = this->lambda0 * e;
     real const & J = particle.Jp;
-    return (2.0 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1.0) * J) * (particle.F.inverse().transpose());
+    return (2.0 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1.0) * J) * Mat::Identity();
   }
 
   void endOfStepMutation(Particle & particle) const

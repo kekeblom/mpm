@@ -96,7 +96,7 @@ public:
     Mat PF = materialModel.computePF(particle);
 
     // Cauchy stress times dt and inv_dx
-    Mat stress = -Dinv * par.dt * materialModel.particleVolume * PF * particle.F.transpose();
+    Mat stress = -Dinv * par.dt * materialModel.particleVolume * PF;
 
     affine = stress + materialModel.particleMass * particle.C;
   }
