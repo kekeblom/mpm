@@ -45,6 +45,11 @@ struct SimObject
 
   std::vector<Particle> particles;
   MaterialModel materialModel;
+  real lifetime_begin = 0.0;
+  real lifetime_end = std::numeric_limits<real>::max();
+  bool isActive(real t) {
+    return (t >= lifetime_begin && t < lifetime_end);
+  }
 };
 
 
@@ -55,6 +60,7 @@ class Simulation {
 public:
   SimulationParameters par;
   u32 & N = par.N;
+  double t = 0.0;
 
   using SimObjectType = SimObject<MaterialModel, Particle>;
   std::vector<SimObjectType> objects;
@@ -94,12 +100,14 @@ public:
     particleToGridTransfer(objects);
     gridOperations();
     gridToParticleTransfer(objects);
+    t += par.dt;
   }
 
   template<class SimObjectType>
   void particleToGridTransfer(std::vector<SimObjectType> & objects) {
     // Particle-to-grid.
     for(SimObjectType & object : objects) {
+      if(!object.isActive(t)) {continue;}
       auto & particles = object.particles;
       auto & materialModel = object.materialModel;
       #pragma omp parallel for num_threads(NThreads)
@@ -194,6 +202,7 @@ public:
   void gridToParticleTransfer(std::vector<SimObjectType> & objects) {
     // Grid-to-particle.
     for(SimObjectType & object : objects) {
+      if(!object.isActive(t)) {continue;}
       auto & particles = object.particles;
       auto & materialModel = object.materialModel;
       #pragma omp parallel for num_threads(NThreads)
@@ -263,7 +272,9 @@ public:
                  MaterialModel materialModel,
                  real size,                     // size of the object, measured as the longest edge of the bounding box
                  Vec position,                  // position of the object within the scene (lowest corner of object)
-                 Vec velocity)                  // initial velocity of the object
+                 Vec velocity,                  // initial velocity of the object
+                 real lifetime_begin = 0.0,
+                 real lifetime_end = std::numeric_limits<real>::max())
   {
     auto mesh = loadMesh(filepath, size, position);
 
@@ -272,9 +283,11 @@ public:
                  u32(1.0 / materialModel.particleVolume),
                  velocity,
                  objects.back().particles);
+    objects.back().lifetime_begin = lifetime_begin;
+    objects.back().lifetime_end = lifetime_end;
   }
 
-  size_t getParticleCount()
+  size_t getFullParticleCount()
   {
     size_t n = 0;
     for(auto & object : objects) {
@@ -292,6 +305,15 @@ public:
     return particles_all;
   }
 
+  std::vector<Particle> & getActiveParticleList()
+  {
+    particles_all.resize(0);
+    for(auto & object : objects) {
+      if(!object.isActive(t)) {continue;}
+      particles_all.insert(particles_all.end(), object.particles.begin(), object.particles.end());
+    }
+    return particles_all;
+  }
 
 private:
 
@@ -377,18 +399,20 @@ int main(int argc, char *argv[]) {
              ParticleType,
              InterpolationKernel> simulation(flags, InterpolationKernel());
 
-  // crate objects to simulate
-  simulation.addObject(flags.load_mesh,
-                       MaterialModel(1.0/flags.particle_count, 400, 1.4e5, 0.2, 10, 1.0-1e-2, 1.0+3e-3),  // soft, light snow
-                       0.3,
-                       Vec(0.3, 0.6, 0.3),
-                       Vec(0.0,0.0,0.0));
+  ////////////////////////////
+  // Examples
+  ////////////////////////////
+//  simulation.addObject(flags.load_mesh,
+//                       MaterialModel(1.0/flags.particle_count, 400, 1.4e5, 0.2, 10, 1.0-1e-2, 1.0+3e-3),  // soft, light snow
+//                       0.3,
+//                       Vec(0.3, 0.6, 0.3),
+//                       Vec(0.0,0.0,0.0));
 
-  simulation.addObject(flags.load_mesh,
-                       MaterialModel(1.0/flags.particle_count, 700, 1.4e5, 0.2, 10, 1.0-5e-2, 1.0+1.5e-2),  // harder, heavier snow
-                       0.2,
-                       Vec(0.35, 0.1, 0.3),
-                       Vec(0.0,5.0,0.0));
+//  simulation.addObject(flags.load_mesh,
+//                       MaterialModel(1.0/flags.particle_count, 700, 1.4e5, 0.2, 10, 1.0-5e-2, 1.0+1.5e-2),  // harder, heavier snow
+//                       0.2,
+//                       Vec(0.35, 0.1, 0.3),
+//                       Vec(0.0,5.0,0.0));
 
 //  simulation.addObject(flags.load_mesh,
 //                       MaterialModel(1.0/flags.particle_count, 400, 1.4e5, 0.2, 0, 0.0, 1.0e30),  // "Jelly", by abuse of the snow material model
@@ -402,11 +426,51 @@ int main(int argc, char *argv[]) {
 //                       Vec(0.25, 0.4, 0.25),
 //                       Vec(0.0,0.0,0.0));
 
+  ////////////////////////////
+  // Scene: Snowman gets hit
+  ////////////////////////////
+
+  std::string meshes_dir = "../meshes/";
+  simulation.addObject(meshes_dir + "sphere.obj",
+                       MaterialModel(1.0/flags.particle_count, 700, 1.4e5, 0.2, 10, 1.0-2.5e-2, 1.0+0.75e-2),  // soft, light snow
+                       0.4,
+                       Vec(0.3, 0.03, 0.3),
+                       Vec(0.0,0.0,0.0));
+  simulation.addObject(meshes_dir + "sphere.obj",
+                       MaterialModel(1.0/flags.particle_count, 700, 1.4e5, 0.2, 10, 1.0-2.5e-2, 1.0+0.75e-2),  // soft, light snow
+                       0.3,
+                       Vec(0.35, 0.43, 0.35),
+                       Vec(0.0,0.0,0.0));
+  simulation.addObject(meshes_dir + "sphere.obj",
+                       MaterialModel(1.0/flags.particle_count, 700, 1.4e5, 0.2, 10, 1.0-2.5e-2, 1.0+0.75e-2),  // soft, light snow
+                       0.2,
+                       Vec(0.4, 0.75, 0.4),
+                       Vec(0.0,0.0,0.0));
+
+  simulation.addObject(meshes_dir + "sphere.obj",
+                       MaterialModel(1.0/flags.particle_count, 500, 1.4e5, 0.2, 10, 1.0-1.5e-2, 1.0+0.5e-2),  // soft, light snow
+                       0.1,
+                       Vec(0.05, 0.5, 0.46),
+                       Vec(7.0,2.5,0.0),
+                       0.5);
+
+  ////////////////////////////
+  // Scene: Rubber Duck
+  ////////////////////////////
+//  std::string meshes_dir = "../meshes/";
+//  simulation.addObject(meshes_dir + "rubber_duck.obj",
+//                       MaterialModel(1.0/flags.particle_count, 100, 2.0e5, 0.2, 0, 0.0, 1.0e30),
+//                       0.4,
+//                       Vec(0.3, 0.4, 0.3),
+//                       Vec(0.0,0.0,0.0));
+
+
+
   ParticleWriter writer;
 
-  Renderer renderer(simulation.getParticleCount(), flags.save_dir);
+  Renderer renderer(simulation.getFullParticleCount(), flags.save_dir);
 
-  renderer.render(simulation.getFullParticleList());
+  renderer.render(simulation.getActiveParticleList());
 
   MeshBuilder mesher(simulation.par, flags, flags.mesh_grid);
 
@@ -428,17 +492,17 @@ int main(int argc, char *argv[]) {
     std::cout << "Step " << i << "\r" << std::flush;
     simulation.advance();
     if(i%20 == 0) {
-      renderer.render(simulation.getFullParticleList());
+      renderer.render(simulation.getActiveParticleList());
     }
     if (save && (i % save_every) == 0) {
       std::stringstream ss;
       ss << flags.save_dir << "/meshes/mesh_" << frame_id << ".obj";
-      mesher.computeMesh(ss.str(), simulation.getFullParticleList());
+      mesher.computeMesh(ss.str(), simulation.getActiveParticleList());
       ss.str("");
       ss.clear();
       ss << flags.save_dir << "/particles/particles_" << frame_id << ".bgeo";
       std::string filepath = ss.str();
-      writer.writeParticles(filepath, simulation.getFullParticleList());
+      writer.writeParticles(filepath, simulation.getActiveParticleList());
       frame_id++;
     }
   }
