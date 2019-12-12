@@ -26,7 +26,7 @@
 
 namespace fs = boost::filesystem;
 
-const unsigned int FrameRate = 120;
+const unsigned int FrameRate = 240;
 
 //const real ParticleMass = 1.0;
 //const real ParticleVolume = 1.0;
