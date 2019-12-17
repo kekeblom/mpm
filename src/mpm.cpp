@@ -430,7 +430,7 @@ int main(int argc, char *argv[]) {
                        0.5);
 
   ////////////////////////////
-  // Scene: Rubber duck hets hit (by metal cube)
+  // Scene: Rubber duck gets hit (by metal cube)
   ////////////////////////////
 //  simulation.addObject(meshes_dir + "rubber_duck.obj",
 //                       MaterialModel(1.0/flags.particle_count, 200, 1.4e5, 0.2, 0, 0.0, 1.0e30),
@@ -528,7 +528,7 @@ int main(int argc, char *argv[]) {
     }
     if (save && (i % save_every) == 0) {
       std::stringstream ss;
-      ss << flags.save_dir << "/meshes/mesh_" << frame_id << ".obj";
+      ss << flags.save_dir << "/meshes/mesh_" << std::setfill('0') << std::setw(5) << frame_id << ".obj";
       mesher.computeMesh(ss.str(), simulation.getActiveParticleList());
       ss.str("");
       ss.clear();
