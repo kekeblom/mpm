@@ -2,4 +2,3 @@ build/
 build*/
 
 CMakeLists.txt.user
-include/igl/
