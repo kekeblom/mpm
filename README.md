@@ -59,11 +59,17 @@ This should open a small 2D visualization of the simulation with a yellow snowma
 **ATTENTION:** Please make sure to actually run the application from within the build folder (or any folder within the main project directory), such that all relative paths are correct (e.g. to find some input data.)
 
 Some command line options are available; these are the most important ones:
+
 ``` dt ``` 		timestep (default 1e-4)
+
 ``` N ``` 		number of MPM-grid cells per dimension (default 60)
+
 ``` particle-count ```  number of particles per unit cube. Note: the simulation domain is a unit cube. (default 500000)
+
 ``` save-dir ```   where to save the output (mesh or particles) (default is empty, so no output is generated)
+
 ``` laplacian_smooth ``` whether to apply laplacian smoothing to the output mesh (0 or 1, default is 1).
+
 
 For further options, please refer directly to the file  ```options.h```.
 
@@ -77,7 +83,11 @@ Scenarios can conveniently be scripted in a C++ - like syntax and are compiled t
 (Yes, runtime input would be nicer of course, but the reality is also that the selected material model needs to be known at compile time.)
 
 ## Code Structure
-The main file is ```mpm.cpp```. The main function is at the very bottom - this is where the simulation is set up and the main simulation loop sits. Otherwise, this file contains the *simulation class*, which handles the principal steps that are general to MPM. It relies on several "modules": a *material model*, a *transfer scheme*, a *particle type* and an *interpolation kernel*. These are implemented in the header files:
+The main file is ```mpm.cpp```. The main function is at the very bottom - this is where the simulation is set up and the main simulation loop sits. Otherwise, this file contains the *simulation class*, which handles the principal steps that are general to MPM. It relies on several "modules": a *material model*, a *transfer scheme*, a *particle type* and an *interpolation kernel*. 
+These are implemented in the header files:
+
 ```MaterialModel.h```
+
 ```TransferScheme.h``` (also contains a matching particle type)
+
 ```InterpolationKernel.h```
