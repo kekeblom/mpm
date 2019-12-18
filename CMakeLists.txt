@@ -1,11 +1,19 @@
 cmake_minimum_required(VERSION 3.9 FATAL_ERROR)
 project(mpm)
 
+#-------------------
+# build options
+#-------------------
+option(USE_OPENMP "use parallelization with OpenMp" TRUE)
+
+
+#-------------------
+# General
+#-------------------
 set(CMAKE_CXX_STANDARD 17)
 set(CXX_EXTENSIONS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY bin)
 
-set(USE_OPENMP TRUE)
 
 include(CMakePackageConfigHelpers)
 
@@ -16,7 +24,6 @@ add_executable(mpm ${TARGET_SOURCES})
 find_package(OpenGL 4.1 REQUIRED)
 find_package(glfw3 3 REQUIRED)
 find_package(Boost 1.6 REQUIRED COMPONENTS filesystem)
-#find_package(Threads REQUIRED)
 find_package(Eigen3 3.3 REQUIRED)
 find_package(GTest)
 if(USE_OPENMP)
@@ -38,7 +45,7 @@ if(USE_OPENMP)
     set(COMMON_LIBRARIES ${COMMON_LIBRARIES} OpenMP::OpenMP_CXX)
 endif()
 
-# add Partio (if available)
+# add Partio (if available, otherwise no exporting of particles)
 find_library(PARTIO partio PATH ${LOCAL_LIB_DIR})
 if(PARTIO)
     set(COMMON_LIBRARIES ${COMMON_LIBRARIES} ${PARTIO})
@@ -50,7 +57,7 @@ endif()
 target_link_libraries(mpm ${COMMON_LIBRARIES})
 
 #-------------------
-# Testing
+# Testing (optional)
 #-------------------
 if(GTest_FOUND)
     # Compile main sources as lib for testing.

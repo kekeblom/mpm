@@ -28,15 +28,13 @@ struct SimulationParameters {
   {}
 };
 
+
 // usage: one instance of this class for each particle
 class TransferSchemeBase {
-
 
 public:
   Veci range_begin;
 
-
-public:
   // ATTENTION: only to be called after p2g_prepare_particle() or g2p_prepare_particle()
   Veci get_range_begin()
   {
@@ -47,7 +45,6 @@ public:
   // until that's the case, please refer to the MLS_APIC_Scheme as an example.
 
 };
-
 
 
 struct MLS_APIC_Particle : ParticleBase {
@@ -62,19 +59,14 @@ struct MLS_APIC_Particle : ParticleBase {
 };
 
 
-
 template <class InterpolationKernel>
 class MLS_APIC_Scheme : public TransferSchemeBase {
 
 public:
-
   Mat Dinv;
   Mat affine;
 
   Eigen::Matrix<real, 3, InterpolationKernel::size()> weights;
-
-
-public:
 
   template<class MaterialModel>
   void p2g_prepare_particle(MLS_APIC_Particle const & particle,

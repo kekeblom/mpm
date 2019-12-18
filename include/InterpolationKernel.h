@@ -9,10 +9,6 @@ class InterpolationKernelBase {
 
 public:
 
-
-public:
-
-
   static constexpr u32 size() {return N;}
   static constexpr bool d_is_const() {return D_is_const;}
 
@@ -58,11 +54,7 @@ public:
 
 
 
-
-
 class QuadraticInterpolationKernel : public InterpolationKernelBase<3, true> {
-
-public:
 
 public:
 

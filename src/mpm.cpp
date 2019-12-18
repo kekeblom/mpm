@@ -26,25 +26,32 @@
 
 namespace fs = boost::filesystem;
 
-const unsigned int FrameRate = 240;
+const unsigned int FrameRate = 240; // for export of data
 
-//const real ParticleMass = 1.0;
-//const real ParticleVolume = 1.0;
-const real Gravity = -9.81;
+const real Gravity = -9.81; // Gravity is, in good approximation, global ;)
 const int NThreads = 8;
+
+
+//-------------------------
+// Setting up Simulation scenarios:
+// to try different scenarios please scroll down to the main function.
+// ------------------------
+
 
 float get_random() {
   return float(rand()) / float(RAND_MAX);
 }
 
 
+// defines a "physical" object to be simulated
 template<class MaterialModel, class Particle>
 struct SimObject
 {
   SimObject(MaterialModel materialModel) : materialModel(materialModel) {}
-
+  // actual properties
   std::vector<Particle> particles;
   MaterialModel materialModel;
+  // Objects may exist only for a limited time during the simulation
   real lifetime_begin = 0.0;
   real lifetime_end = std::numeric_limits<real>::max();
   bool isActive(real t) {
@@ -53,7 +60,7 @@ struct SimObject
 };
 
 
-
+// core class of the simulation - does all the heavy lifting.
 template<class MaterialModel, class TransferScheme, class Particle, class InterpolationKernel>
 class Simulation {
 
@@ -63,14 +70,14 @@ public:
   double t = 0.0;
 
   using SimObjectType = SimObject<MaterialModel, Particle>;
-  std::vector<SimObjectType> objects;
+  std::vector<SimObjectType> objects; // Objects to be simulated
 
   boost::multi_array<Vec4, 3> grid; // Velocity x, y, z, mass
 
-  InterpolationKernel interpolationKernel;
+  InterpolationKernel interpolationKernel; // how to interpolate from particles to grid to particle
 
 private:
-  std::vector<Particle> particles_all;  // used to accumulate all particles of the simulation, for simplified (but inefficient) access.
+  std::vector<Particle> particles_all;  // used to accumulate all particles of the simulation, for simplified (but inefficient) access. For exporting stuff only.
 
 public:
   Simulation(const CLIOptions &opts,
@@ -89,12 +96,12 @@ public:
           grid[i][j][k](1) = 0;
           grid[i][j][k](2) = 0;
           grid[i][j][k](3) = 0.0;
-          //grid[i][j][k] = Vec4::Constant(0.0);
         }
       }
     }
   }
 
+  // this is one iteration of the simulation
   void advance() {
     resetGrid();
     particleToGridTransfer(objects);
@@ -106,12 +113,12 @@ public:
   template<class SimObjectType>
   void particleToGridTransfer(std::vector<SimObjectType> & objects) {
     // Particle-to-grid.
-    for(SimObjectType & object : objects) {
+    for(SimObjectType & object : objects) { // loop through objects
       if(!object.isActive(t)) {continue;}
       auto & particles = object.particles;
       auto & materialModel = object.materialModel;
       #pragma omp parallel for num_threads(NThreads)
-      for (u32 pi = 0; pi < particles.size(); ++pi) {
+      for (u32 pi = 0; pi < particles.size(); ++pi) { // loop through particles
         Particle & particle = particles[pi];
 
         TransferScheme transferScheme;
@@ -120,8 +127,9 @@ public:
                                             interpolationKernel,
                                             materialModel);
 
-        Veci range_begin = transferScheme.get_range_begin();
+        Veci range_begin = transferScheme.get_range_begin();  // get start of range in grid that is influenced by the particle
 
+        // handle particles that are completely outside of the domain
         bool out_of_range = false;
         for(int i = 0; i < 3; ++i) {
           if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= grid.shape()[i]) {
@@ -133,6 +141,7 @@ public:
           continue;
         }
 
+        // bounds of particle-influence
         Vec dist_part2node;
         u32 i_begin = std::max(0, -range_begin(0));
         u32 j_begin = std::max(0, -range_begin(1));
@@ -141,6 +150,7 @@ public:
         u32 j_end = std::min(interpolationKernel.size(), u32(grid.shape()[1]) - range_begin(1));
         u32 k_end = std::min(interpolationKernel.size(), u32(grid.shape()[2]) - range_begin(2));
 
+        // loop through relevant grid cells
         for(u32 i = i_begin; i < i_end; ++i) {
           u32 i_glob = range_begin(0) + i;
           dist_part2node(0) = i_glob * par.dx - particle.x(0);
@@ -157,7 +167,7 @@ public:
 
               for(int idx = 0; idx < 4; ++idx) {
                 #pragma omp atomic
-                grid[i_glob][j_glob][k_glob](idx) += node_contribution(idx);
+                grid[i_glob][j_glob][k_glob](idx) += node_contribution(idx);  // actual transfer
               }
             }
           }
@@ -201,12 +211,12 @@ public:
   template<class SimObjectType>
   void gridToParticleTransfer(std::vector<SimObjectType> & objects) {
     // Grid-to-particle.
-    for(SimObjectType & object : objects) {
+    for(SimObjectType & object : objects) { // loop through objects
       if(!object.isActive(t)) {continue;}
       auto & particles = object.particles;
       auto & materialModel = object.materialModel;
       #pragma omp parallel for num_threads(NThreads)
-      for (u32 pi = 0; pi < particles.size(); ++pi) {
+      for (u32 pi = 0; pi < particles.size(); ++pi) { // loop through particles
         Particle & particle = particles[pi];
 
         TransferScheme transferScheme;
@@ -214,8 +224,9 @@ public:
                                             par,
                                             interpolationKernel);
 
-        Veci range_begin = transferScheme.get_range_begin();
+        Veci range_begin = transferScheme.get_range_begin(); // get start of range in grid that is influenced by the particle
 
+        // handle particles that are completely outside of the domain
         bool out_of_range = false;
         for(int i = 0; i < 3; ++i) {
           if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= grid.shape()[i]) {
@@ -227,6 +238,7 @@ public:
           continue;
         }
 
+        // bounds of particle-influence
         Vec dist_part2node;
         u32 i_begin = std::max(0, -range_begin(0));
         u32 j_begin = std::max(0, -range_begin(1));
@@ -235,6 +247,7 @@ public:
         u32 j_end = std::min(interpolationKernel.size(), u32(grid.shape()[1]) - range_begin(1));
         u32 k_end = std::min(interpolationKernel.size(), u32(grid.shape()[2]) - range_begin(2));
 
+        // loop through relevant grid cells
         for(u32 i = i_begin; i < i_end; ++i) {
           u32 i_glob = range_begin(0) + i;
           dist_part2node(0) = i_glob * par.dx - particle.x(0);
@@ -539,4 +552,8 @@ int main(int argc, char *argv[]) {
     }
   }
 }
+
+
+
+
 

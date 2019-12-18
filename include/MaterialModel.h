@@ -19,8 +19,6 @@ public: //(private)
   real particleVolume;
   real particleMass;
 
-public:
-
   MaterialModelBase(real volume, real density)
     : particleVolume(volume)
   {
@@ -45,8 +43,6 @@ public:
   // lame parameters
   real mu0;
   real lambda0;
-
-public:
 
   MMFixedCorotated(real volume, real density, real E, real Nu)
     : MaterialModelBase<Particle>(volume, density)
@@ -81,8 +77,6 @@ public:
   real hardening;
   real plast_clamp_lower;
   real plast_clamp_higher;
-
-public:
 
   MMSnow(real volume,         // particle volume, defined by sampling density of the particles
          real density = 400,  //
@@ -139,8 +133,6 @@ class MMJelly : public MMFixedCorotated<Particle> {
 
 public:
   real hardening;
-
-public:
 
   MMJelly(real volume, real density = 1000, real E = 1.0e5, real Nu = 0.3, real hardening = 10)
     : MMFixedCorotated<Particle>(volume, density, E, Nu),
