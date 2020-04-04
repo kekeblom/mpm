@@ -137,14 +137,14 @@ public:
 
   void g2p_node_contribution(MLS_APIC_Particle & particle,
                              Vec const & dist_part2node,
-                             Vec4 const & grid_node,
+                             float* const & grid_node,
                              int i, int j, int k)
   {
     // adds, for each grid point, the respective contribution to the updated particle properties.
 
     real weight = weights(0, i) * weights(1, j) * weights(2, k);
 
-    Vec v_grid = grid_node.head<3>();
+    Vec v_grid(grid_node[0], grid_node[1], grid_node[2]);
     particle.v += weight * v_grid;
 
     //particle.C += (Dinv * v_grid) * (weight * dist_part2node).transpose();

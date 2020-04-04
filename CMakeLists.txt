@@ -1,11 +1,10 @@
 cmake_minimum_required(VERSION 3.9 FATAL_ERROR)
-project(mpm)
+project(mpm LANGUAGES CXX C CUDA)
 
 #-------------------
 # build options
 #-------------------
-option(USE_OPENMP "use parallelization with OpenMp" TRUE)
-
+# option(USE_OPENMP "use parallelization with OpenMp" TRUE)
 
 #-------------------
 # General
@@ -13,24 +12,28 @@ option(USE_OPENMP "use parallelization with OpenMp" TRUE)
 set(CMAKE_CXX_STANDARD 17)
 set(CXX_EXTENSIONS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY bin)
-
+set(CUDA_SEPARABLE_COMPILATION ON)
 
 include(CMakePackageConfigHelpers)
 
-file(GLOB TARGET_SOURCES src/*.cpp src/*.c)
+file(GLOB TARGET_SOURCES src/*.cpp src/*.c src/*.cu)
 
+add_library(mpm_lib ${TARGET_SOURCES})
+set_target_properties(mpm_lib PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 add_executable(mpm ${TARGET_SOURCES})
 
 find_package(OpenGL 4.1 REQUIRED)
 find_package(glfw3 3 REQUIRED)
 find_package(Boost 1.6 REQUIRED COMPONENTS filesystem)
-find_package(Eigen3 3.3 REQUIRED)
+find_package(Eigen3 3.3.7 REQUIRED)
 find_package(GTest)
-if(USE_OPENMP)
-    find_package(OpenMP REQUIRED)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-    message("using openMP")
-endif()
+find_package(CUDA REQUIRED)
+
+find_package(OpenMP REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+set(CMAKE_CUDA_FLAGS "--compiler-options \"${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}\"")
+# message("-- Using openMP")
+# set(CMAKE_CUDA_FLAGS "")
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall")
@@ -41,9 +44,9 @@ link_directories(${LOCAL_LIB_DIR})
 
 set(COMMON_LIBRARIES ${OPENGL_gl_LIBRARY} glfw Boost::filesystem ${PNG_LIBRARIES} ${CMAKE_DL_LIBS})
 
-if(USE_OPENMP)
-    set(COMMON_LIBRARIES ${COMMON_LIBRARIES} OpenMP::OpenMP_CXX)
-endif()
+# if(USE_OPENMP)
+#     set(COMMON_LIBRARIES ${COMMON_LIBRARIES} OpenMP::OpenMP_CXX)
+# endif()
 
 # add Partio (if available, otherwise no exporting of particles)
 find_library(PARTIO partio PATH ${LOCAL_LIB_DIR})
@@ -54,6 +57,7 @@ else()
     message("Warnig: Partio library not found, will not be able to write particles to file.")
 endif()
 
+set_target_properties(mpm PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(mpm ${COMMON_LIBRARIES})
 
 #-------------------
@@ -61,7 +65,6 @@ target_link_libraries(mpm ${COMMON_LIBRARIES})
 #-------------------
 if(GTest_FOUND)
     # Compile main sources as lib for testing.
-    add_library(mpm_lib ${TARGET_SOURCES})
     target_link_libraries(mpm_lib ${COMMON_LIBRARIES})
 
     enable_testing()
@@ -72,8 +75,8 @@ if(GTest_FOUND)
         get_filename_component(_test_name ${_test_file} NAME_WE)
         add_executable(${_test_name} ${_test_file})
         target_link_libraries(${_test_name} mpm_lib ${COMMON_LIBRARIES} ${GTEST_LIBRARIES} pthread)
-        message(${_test_name})
         add_test(${_test_name} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${_test_name})
+				set_target_properties(${_test_name} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
         set_tests_properties(${_test_name} PROPERTIES TIMEOUT 5)
     endforeach()
 else()

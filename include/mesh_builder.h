@@ -1,3 +1,5 @@
+#ifndef H_MESH_BUILDER
+#define H_MESH_BUILDER
 #include <cassert>
 #include <boost/multi_array.hpp>
 #include <igl/copyleft/marching_cubes.h>
@@ -238,3 +240,4 @@ std::pair<Eigen::MatrixXd, Eigen::MatrixXi> MeshBuilder::smoothMesh(const Eigen:
   return std::make_pair(U, F);
 }
 
+#endif H_MESH_BUILDER

@@ -2,11 +2,9 @@
 #include <iostream>
 #include <algorithm>
 #include <array>
-#include <Eigen/Core>
+#include <Eigen/Dense>
 #include <assert.h>
 #include <boost/filesystem.hpp>
-#include <boost/multi_array.hpp>
-#include <omp.h>
 #include <cmath>
 #include <igl/readOBJ.h>
 #include <igl/winding_number.h>
@@ -30,18 +28,11 @@ const unsigned int FrameRate = 240; // for export of data
 
 const real Gravity = -9.81; // Gravity is, in good approximation, global ;)
 const int NThreads = 8;
-
-
-//-------------------------
-// Setting up Simulation scenarios:
-// to try different scenarios please scroll down to the main function.
-// ------------------------
-
+const int GridVectorSize = 4;
 
 float get_random() {
   return float(rand()) / float(RAND_MAX);
 }
-
 
 // defines a "physical" object to be simulated
 template<class MaterialModel, class Particle>
@@ -59,6 +50,27 @@ struct SimObject
   }
 };
 
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true) {
+   if (code != cudaSuccess) {
+      fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
+__global__ void zeroGrid(float *grid) {
+  int N = gridDim.x;
+  int max_index = GridVectorSize * N * N * N;
+  int base_index = GridVectorSize * (N * N * blockIdx.x + N * threadIdx.x);
+  for (int i=0; i < N; i++) {
+    int index = base_index + GridVectorSize * i;
+    if (index >= max_index) return;
+    float* cell = &grid[index];
+    for (int j=0; j < GridVectorSize; j++) {
+      cell[j] = 0.0;
+    }
+  }
+}
 
 // core class of the simulation - does all the heavy lifting.
 template<class MaterialModel, class TransferScheme, class Particle, class InterpolationKernel>
@@ -66,13 +78,16 @@ class Simulation {
 
 public:
   SimulationParameters par;
-  u32 & N = par.N;
+  u32 &N = par.N;
+  int N2;
+  int sizeof_grid;
   double t = 0.0;
 
   using SimObjectType = SimObject<MaterialModel, Particle>;
   std::vector<SimObjectType> objects; // Objects to be simulated
 
-  boost::multi_array<Vec4, 3> grid; // Velocity x, y, z, mass
+  float* host_grid;
+  float* device_grid;
 
   InterpolationKernel interpolationKernel; // how to interpolate from particles to grid to particle
 
@@ -83,22 +98,26 @@ public:
   Simulation(const CLIOptions &opts,
              InterpolationKernel const & interpolationKernel)
     : par(opts.dt, opts.N),
-      grid(boost::extents[par.N][par.N][par.N]),
-      interpolationKernel(interpolationKernel)
-  {}
+      interpolationKernel(interpolationKernel) {
+    N2 = par.N * par.N;
+    host_grid = new float[GridVectorSize * par.N * par.N * par.N];
+    sizeof_grid = GridVectorSize * sizeof(float) * N * N * N;
+    cudaMalloc((void **)&device_grid, GridVectorSize * par.N * par.N * par.N * sizeof(float));
+    gpuErrchk(cudaGetLastError());
+    gpuErrchk(cudaDeviceSynchronize());
+  }
+
+  ~Simulation() {
+    cudaFree(device_grid);
+    delete[] host_grid;
+  }
 
   void resetGrid() {
-    #pragma omp parallel for collapse(3) num_threads(NThreads)
-    for (u32 i=0; i < N; i++) {
-      for (u32 j=0; j < N; j++) {
-        for (u32 k=0; k < N; k++) {
-          grid[i][j][k](0) = 0;
-          grid[i][j][k](1) = 0;
-          grid[i][j][k](2) = 0;
-          grid[i][j][k](3) = 0.0;
-        }
-      }
-    }
+    hostToDevice();
+    zeroGrid<<<N, N>>>(device_grid);
+    gpuErrchk(cudaGetLastError());
+    gpuErrchk(cudaDeviceSynchronize());
+    deviceToHost();
   }
 
   // this is one iteration of the simulation
@@ -117,7 +136,7 @@ public:
       if(!object.isActive(t)) {continue;}
       auto & particles = object.particles;
       auto & materialModel = object.materialModel;
-      #pragma omp parallel for num_threads(NThreads)
+      //#pragma omp parallel for num_threads(NThreads)
       for (u32 pi = 0; pi < particles.size(); ++pi) { // loop through particles
         Particle & particle = particles[pi];
 
@@ -132,7 +151,7 @@ public:
         // handle particles that are completely outside of the domain
         bool out_of_range = false;
         for(int i = 0; i < 3; ++i) {
-          if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= grid.shape()[i]) {
+          if(range_begin(i) + int(interpolationKernel.size()) < 0 || range_begin(i) >= int(N)) {
             out_of_range = true;
             break;
           }
@@ -146,9 +165,9 @@ public:
         u32 i_begin = std::max(0, -range_begin(0));
         u32 j_begin = std::max(0, -range_begin(1));
         u32 k_begin = std::max(0, -range_begin(2));
-        u32 i_end = std::min(interpolationKernel.size(), u32(grid.shape()[0]) - range_begin(0));
-        u32 j_end = std::min(interpolationKernel.size(), u32(grid.shape()[1]) - range_begin(1));
-        u32 k_end = std::min(interpolationKernel.size(), u32(grid.shape()[2]) - range_begin(2));
+        u32 i_end = std::min(interpolationKernel.size(), N - range_begin(0));
+        u32 j_end = std::min(interpolationKernel.size(), N - range_begin(1));
+        u32 k_end = std::min(interpolationKernel.size(), N - range_begin(2));
 
         // loop through relevant grid cells
         for(u32 i = i_begin; i < i_end; ++i) {
@@ -165,9 +184,10 @@ public:
 
               Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, dist_part2node, materialModel.particleMass, i, j, k);
 
-              for(int idx = 0; idx < 4; ++idx) {
-                #pragma omp atomic
-                grid[i_glob][j_glob][k_glob](idx) += node_contribution(idx);  // actual transfer
+              float* cell = getCell(i_glob, j_glob, k_glob);
+              for(int idx = 0; idx < GridVectorSize; ++idx) {
+                //#pragma omp atomic
+                cell[idx] += node_contribution(idx);
               }
             }
           }
@@ -177,18 +197,21 @@ public:
   }
 
   void gridOperations() {
+    const Vec4 gravity(0, Gravity, 0, 0);
     // Grid operations.
-    #pragma omp parallel for collapse(3) num_threads(NThreads)
+    //#pragma omp parallel for collapse(3) num_threads(NThreads)
     for (size_t i = 0; i < N; i++) {
       for (size_t j = 0; j < N; j++) {
         for (size_t k = 0; k < N; k++) {
-          Vec4 &cell = grid[i][j][k];
+          float *cell = getCell(i, j, k);
 
           // boundary collisions
           if (cell[3] > 0.0) {
-            cell /= cell[3];
+            for (int w=0; w < GridVectorSize; w++) {
+              cell[w] /= cell[3];
+            }
 
-            cell += par.dt * Vec4(0, Gravity, 0, 0);
+            cell[1] += par.dt * Gravity;
 
             const real boundary = 0.05;
 
@@ -197,7 +220,10 @@ public:
             const real z = real(k) / N;
             if (x < boundary || x > 1-boundary || y > 1-boundary ||
                 z < boundary || z > 1-boundary) {
-              cell = Vec4(0, 0, 0, cell[3]);
+              cell[0] = 0.0;
+              cell[1] = 0.0;
+              cell[2] = 0.0;
+              cell[3] = cell[3];
             }
             if (y < boundary) {
               cell[1] = std::max(real(0.0), cell[1]);
@@ -215,7 +241,7 @@ public:
       if(!object.isActive(t)) {continue;}
       auto & particles = object.particles;
       auto & materialModel = object.materialModel;
-      #pragma omp parallel for num_threads(NThreads)
+      //#pragma omp parallel for num_threads(NThreads)
       for (u32 pi = 0; pi < particles.size(); ++pi) { // loop through particles
         Particle & particle = particles[pi];
 
@@ -229,7 +255,7 @@ public:
         // handle particles that are completely outside of the domain
         bool out_of_range = false;
         for(int i = 0; i < 3; ++i) {
-          if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= grid.shape()[i]) {
+          if(range_begin(i)+int(interpolationKernel.size()) < 0 || range_begin(i) >= int(N)) {
             out_of_range = true;
             break;
           }
@@ -243,9 +269,9 @@ public:
         u32 i_begin = std::max(0, -range_begin(0));
         u32 j_begin = std::max(0, -range_begin(1));
         u32 k_begin = std::max(0, -range_begin(2));
-        u32 i_end = std::min(interpolationKernel.size(), u32(grid.shape()[0]) - range_begin(0));
-        u32 j_end = std::min(interpolationKernel.size(), u32(grid.shape()[1]) - range_begin(1));
-        u32 k_end = std::min(interpolationKernel.size(), u32(grid.shape()[2]) - range_begin(2));
+        u32 i_end = std::min(interpolationKernel.size(), N - range_begin(0));
+        u32 j_end = std::min(interpolationKernel.size(), N - range_begin(1));
+        u32 k_end = std::min(interpolationKernel.size(), N - range_begin(2));
 
         // loop through relevant grid cells
         for(u32 i = i_begin; i < i_end; ++i) {
@@ -264,7 +290,7 @@ public:
               // velocity
               transferScheme.g2p_node_contribution(particle,
                                                    dist_part2node,
-                                                   grid[i_glob][j_glob][k_glob],
+                                                   getCell(i_glob, j_glob, k_glob),
                                                    i, j, k);
             }
           }
@@ -329,6 +355,18 @@ public:
   }
 
 private:
+
+  float* getCell(int i, int j, int k) {
+    return &host_grid[GridVectorSize * (N2 * i + N * j + k)];
+  }
+
+  void hostToDevice() {
+    cudaMemcpy(device_grid, host_grid, sizeof_grid, cudaMemcpyHostToDevice);
+  }
+
+  void deviceToHost() {
+    cudaMemcpy(host_grid, device_grid, sizeof_grid, cudaMemcpyDeviceToHost);
+  }
 
   std::pair<Eigen::MatrixXf, Eigen::MatrixXi> loadMesh(const std::string& filepath, double size, Vec position) {
     Eigen::MatrixXf V;
