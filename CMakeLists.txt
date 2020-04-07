@@ -16,24 +16,25 @@ set(CUDA_SEPARABLE_COMPILATION ON)
 
 include(CMakePackageConfigHelpers)
 
-file(GLOB TARGET_SOURCES src/*.cpp src/*.c src/*.cu)
+file(GLOB SOURCES src/*.cpp src/*.c src/*.cu)
+list(REMOVE_ITEM SOURCES ${PROJECT_SOURCE_DIR}/src/main.cpp)
 
-add_library(mpm_lib ${TARGET_SOURCES})
+add_library(mpm_lib ${SOURCES})
 set_target_properties(mpm_lib PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-add_executable(mpm ${TARGET_SOURCES})
+add_executable(mpm src/main.cpp)
 
 find_package(OpenGL 4.1 REQUIRED)
 find_package(glfw3 3 REQUIRED)
-find_package(Boost 1.6 REQUIRED COMPONENTS filesystem)
+find_package(Boost 1.65 REQUIRED COMPONENTS filesystem)
 find_package(Eigen3 3.3.7 REQUIRED)
 find_package(GTest)
 find_package(CUDA REQUIRED)
 
 find_package(OpenMP REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-set(CMAKE_CUDA_FLAGS "--compiler-options \"${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}\"")
 # message("-- Using openMP")
-# set(CMAKE_CUDA_FLAGS "")
+set(CMAKE_CUDA_FLAGS_DEBUG "--expt-relaxed-constexpr -G -g")
+set(CMAKE_CUDA_FLAGS_RELEASE "--expt-relaxed-constexpr -O3")
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall")
@@ -58,7 +59,9 @@ else()
 endif()
 
 set_target_properties(mpm PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-target_link_libraries(mpm ${COMMON_LIBRARIES})
+target_link_libraries(mpm mpm_lib ${COMMON_LIBRARIES})
+
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
 #-------------------
 # Testing (optional)
@@ -69,7 +72,7 @@ if(GTest_FOUND)
 
     enable_testing()
 
-    file(GLOB TEST_SRC_FILES ${PROJECT_SOURCE_DIR}/tests/*.cpp)
+    file(GLOB TEST_SRC_FILES ${PROJECT_SOURCE_DIR}/tests/*.cpp ${PROJECT_SOURCE_DIR}/tests/*.cu)
 
     foreach(_test_file ${TEST_SRC_FILES})
         get_filename_component(_test_name ${_test_file} NAME_WE)
@@ -78,6 +81,7 @@ if(GTest_FOUND)
         add_test(${_test_name} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${_test_name})
 				set_target_properties(${_test_name} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
         set_tests_properties(${_test_name} PROPERTIES TIMEOUT 5)
+        add_dependencies(check ${_test_name})
     endforeach()
 else()
     message("Warnig: GTest not found. No testing possible.")

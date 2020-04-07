@@ -14,7 +14,7 @@
 
 #include "types.h"
 #include "TransferScheme.h"
-#include "InterpolationKernel.h"
+#include "InterpolationKernel.cuh"
 
 class MeshBuilder {
   private:

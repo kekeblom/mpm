@@ -1,6 +1,12 @@
 #ifndef _MATERIAL_MODEL_
 #define _MATERIAL_MODEL_
 
+#ifdef __CUDACC__
+#define CUDA_HOSTDEV __host__ __device__
+#else
+#define CUDA_HOSTDEV
+#define __device__
+#endif
 
 #include "types.h"
 #include "linalg.h"
@@ -20,8 +26,7 @@ public: //(private)
   real particleMass;
 
   MaterialModelBase(real volume, real density)
-    : particleVolume(volume)
-  {
+    : particleVolume(volume) {
     particleMass = density * volume;
   }
 
@@ -45,34 +50,24 @@ public:
   real lambda0;
 
   MMFixedCorotated(real volume, real density, real E, real Nu)
-    : MaterialModelBase<Particle>(volume, density)
-  {
+    : MaterialModelBase<Particle>(volume, density) {
     mu0 = E / (2 * (1 + Nu));
     lambda0 = E * Nu / ((1 + Nu) * (1 - 2 * Nu));
   }
 
-
-  Mat computePF(Particle const & particle) const
-  {
+  __device__ Mat computePF(Particle const & particle) const {
     Mat R, S;
-    polar_decomposition(particle.F, R, S);
-    real const & J = particle.Jp;
+    polar_decomposition_device(particle.F, R, S);
+    real const &J = particle.Jp;
     return (2.0 * mu0 * (particle.F - R) * particle.F.transpose()) + lambda0 * ((J - 1.0) * J) * Mat::Identity();
   }
 
-  void endOfStepMutation(Particle & particle) const
-  {
-    // nothing to do here
-  }
+  void endOfStepMutation(Particle & particle) const {} // nothing to do here
 };
-
-
 
 template <class Particle>
 class MMSnow : public MMFixedCorotated<Particle> {
-
   // adds plasticity and hardening
-
 public:
   real hardening;
   real plast_clamp_lower;
@@ -87,24 +82,19 @@ public:
     : MMFixedCorotated<Particle>(volume, density, E, Nu),
       hardening(hardening),
       plast_clamp_lower(plast_clamp_lower),
-      plast_clamp_higher(plast_clamp_higher)
-  {}
+      plast_clamp_higher(plast_clamp_higher) {}
 
-
-  Mat computePF(Particle const & particle) const
-  {
+  __device__ Mat computePF(Particle const & particle) const {
     Mat R, S;
-    polar_decomposition(particle.F, R, S);
+    polar_decomposition_device(particle.F, R, S);
     real e = std::exp(hardening * (1.0 - particle.Jp));
     real mu = this->mu0 * e;
     real lambda = this->lambda0 * e;
-    real const & J = particle.Jp;
+    real J = particle.Jp;
     return (2.0 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1.0) * J) * Mat::Identity();
   }
 
-
-  void endOfStepMutation(Particle & particle) const
-  {
+  void endOfStepMutation(Particle & particle) const {
     // plasticity
     Mat & F = particle.F;
 
@@ -121,7 +111,6 @@ public:
 
     real newJ = clamp(particle.Jp * oldJ / F.determinant(), 0.6, 20.0);
     particle.Jp = newJ;
-
   }
 };
 
@@ -139,15 +128,13 @@ public:
       hardening(hardening)
   {}
 
-
-  Mat computePF(Particle const & particle) const
-  {
+  __device__ Mat computePF(Particle const & particle) const {
     Mat R, S;
-    polar_decomposition(particle.F, R, S);
+    polar_decomposition_device(particle.F, R, S);
     real e = std::exp(hardening * (1.0 - particle.Jp));
     real mu = this->mu0 * e;
     real lambda = this->lambda0 * e;
-    real const & J = particle.Jp;
+    real J = particle.Jp;
     return (2.0 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1.0) * J) * Mat::Identity();
   }
 

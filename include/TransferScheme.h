@@ -1,7 +1,7 @@
 #ifndef _TRANSFER_SCHEME_
 #define _TRANSFER_SCHEME_
-
 #include "types.h"
+#include "gpu.h"
 
 struct SimulationParameters {
 
@@ -36,26 +36,21 @@ public:
   Veci range_begin;
 
   // ATTENTION: only to be called after p2g_prepare_particle() or g2p_prepare_particle()
-  Veci get_range_begin()
-  {
-    return range_begin;
-  }
+  CUDA_HOSTDEV Veci get_range_begin() { return range_begin; }
 
   // the required methods for any TransferScheme should be listed here.
   // until that's the case, please refer to the MLS_APIC_Scheme as an example.
 
 };
 
-
-struct MLS_APIC_Particle : ParticleBase {
+struct MLS_APIC_Particle : public ParticleBase {
 
   Mat C; // Affine momentum.
   real Jp; // Determinant of the deformation gradient.		// used for hardening of snow
-  MLS_APIC_Particle(Vec x = Vec::Zero(), Vec v = Vec::Zero()) :
-    ParticleBase(x, v),
+  MLS_APIC_Particle(int type = 0, Vec x = Vec::Zero(), Vec v = Vec::Zero()) :
+    ParticleBase(type, x, v),
     C(Mat::Zero()),
-    Jp(1.0)
-  {}
+    Jp(1.0) {};
 };
 
 
@@ -69,19 +64,16 @@ public:
   Eigen::Matrix<real, 3, InterpolationKernel::size()> weights;
 
   template<class MaterialModel>
-  void p2g_prepare_particle(MLS_APIC_Particle const & particle,
+  __device__ void p2g_prepare_particle(MLS_APIC_Particle const & particle,
                             SimulationParameters const & par,
                             InterpolationKernel const & interpolationKernel,
-                            MaterialModel const & materialModel)
-  {
+                            MaterialModel const & materialModel) {
     // To be called for each particle in the particle-to-grid transfer
-
     weights = interpolationKernel.weights_per_direction(particle.x, par.dx_inv, range_begin);
 
     if (InterpolationKernel::d_is_const()) {
       Dinv = interpolationKernel.D_inv_const(par.dx_inv);
-    }
-    else {
+    } else {
       Dinv = interpolationKernel.D_inv(particle.x, range_begin, weights, par.dx);
     }
 
@@ -93,19 +85,16 @@ public:
     affine = stress + materialModel.particleMass * particle.C;
   }
 
-
-  Vec4 p2g_node_contribution(MLS_APIC_Particle const & particle,
+  __device__ Vec4 p2g_node_contribution(MLS_APIC_Particle const & particle,
                              Vec const & dist_part2node,
                              real particle_mass,
-                             int i, int j, int k)
-  {
+                             int i, int j, int k) {
     // The momentum & mass contribution the particle has on a single grid-point
-
     Vec momentum = particle.v * particle_mass;
     Vec momentum_affine_delta_pos = momentum + affine * dist_part2node;
-    Vec4 momentum_mass(momentum_affine_delta_pos(0),
-                       momentum_affine_delta_pos(1),
-                       momentum_affine_delta_pos(2),
+    Vec4 momentum_mass(momentum_affine_delta_pos[0],
+                       momentum_affine_delta_pos[1],
+                       momentum_affine_delta_pos[2],
                        particle_mass);
 
     real weight = weights(0, i) * weights(1, j) * weights(2, k);
@@ -113,11 +102,9 @@ public:
     return weight * momentum_mass;
   }
 
-
   void g2p_prepare_particle(MLS_APIC_Particle & particle,
                             SimulationParameters const & par,
-                            InterpolationKernel const & interpolationKernel)
-  {
+                            InterpolationKernel const & interpolationKernel) {
     // To be called for each particle in the grid-to-particle transfer
 
     weights = interpolationKernel.weights_per_direction(particle.x, par.dx_inv, range_begin);
@@ -129,32 +116,27 @@ public:
       Dinv = interpolationKernel.D_inv(particle.x, range_begin, weights, par.dx);
     }
 
-
     particle.C = Mat::Zero();
     particle.v = Vec::Zero();
   }
 
-
   void g2p_node_contribution(MLS_APIC_Particle & particle,
                              Vec const & dist_part2node,
-                             float* const & grid_node,
-                             int i, int j, int k)
-  {
+                             Vec4 const & grid_node,
+                             int i, int j, int k) {
     // adds, for each grid point, the respective contribution to the updated particle properties.
 
     real weight = weights(0, i) * weights(1, j) * weights(2, k);
 
-    Vec v_grid(grid_node[0], grid_node[1], grid_node[2]);
+    Vec v_grid = grid_node.head<3>();
     particle.v += weight * v_grid;
 
     //particle.C += (Dinv * v_grid) * (weight * dist_part2node).transpose();
     particle.C += (weight * v_grid) * (dist_part2node.transpose() * Dinv);
   }
 
-
   void g2p_finish_particle(MLS_APIC_Particle & particle,
-                           SimulationParameters const & par)
-  {
+                           SimulationParameters const & par) {
     // To be called directly after the particle-to-grid transfer.
     // For per-particle modifications that are specific to the transfer scheme.
     // Note: The MaterialModel class contains a similar method that will be called right after this one; to be used for material-specific per-particle modificaitons.
@@ -162,10 +144,7 @@ public:
     // MLS-MPM F-update
     particle.F = (Mat::Identity() + par.dt * particle.C) * particle.F;
   }
-
 };
 
 #endif
-
-
 

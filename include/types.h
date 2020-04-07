@@ -24,12 +24,13 @@ struct ParticleBase {
     // minimal form of particle.
     // Extended particle types needed for more elaborate transfer schemes would derive from here.
 
+    u8 material_type;
     Vec x; // Position.
     Vec v; // Velocity.
     Mat F; // Deformation gradient.
 
-    ParticleBase(Vec x = Vec::Zero(), Vec v = Vec::Zero())
-	: x(x), v(v), F(Mat::Identity()) {}
+    ParticleBase(int type = 0, Vec x = Vec::Zero(), Vec v = Vec::Zero())
+	: material_type(type), x(x), v(v), F(Mat::Identity()) {}
 };
 
 
