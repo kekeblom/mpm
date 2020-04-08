@@ -47,7 +47,7 @@ struct MLS_APIC_Particle : public ParticleBase {
 
   Mat C; // Affine momentum.
   real Jp; // Determinant of the deformation gradient.		// used for hardening of snow
-  MLS_APIC_Particle(int type = 0, Vec x = Vec::Zero(), Vec v = Vec::Zero()) :
+  CUDA_HOSTDEV MLS_APIC_Particle(int type = 0, Vec x = Vec::Zero(), Vec v = Vec::Zero()) :
     ParticleBase(type, x, v),
     C(Mat::Zero()),
     Jp(1.0) {};
@@ -102,7 +102,7 @@ public:
     return weight * momentum_mass;
   }
 
-  void g2p_prepare_particle(MLS_APIC_Particle & particle,
+  __device__ void g2p_prepare_particle(MLS_APIC_Particle & particle,
                             SimulationParameters const & par,
                             InterpolationKernel const & interpolationKernel) {
     // To be called for each particle in the grid-to-particle transfer
@@ -120,12 +120,11 @@ public:
     particle.v = Vec::Zero();
   }
 
-  void g2p_node_contribution(MLS_APIC_Particle & particle,
+  __device__ void g2p_node_contribution(MLS_APIC_Particle & particle,
                              Vec const & dist_part2node,
                              Vec4 const & grid_node,
                              int i, int j, int k) {
     // adds, for each grid point, the respective contribution to the updated particle properties.
-
     real weight = weights(0, i) * weights(1, j) * weights(2, k);
 
     Vec v_grid = grid_node.head<3>();
@@ -135,7 +134,7 @@ public:
     particle.C += (weight * v_grid) * (dist_part2node.transpose() * Dinv);
   }
 
-  void g2p_finish_particle(MLS_APIC_Particle & particle,
+  __device__ void g2p_finish_particle(MLS_APIC_Particle & particle,
                            SimulationParameters const & par) {
     // To be called directly after the particle-to-grid transfer.
     // For per-particle modifications that are specific to the transfer scheme.

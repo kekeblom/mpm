@@ -1,5 +1,6 @@
 #ifndef H_GPU
 #define H_GPU
+#include "cuda_runtime.h"
 
 #ifdef __CUDACC__
 #define CUDA_HOSTDEV __host__ __device__

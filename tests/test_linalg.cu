@@ -5,6 +5,8 @@
 #include "linalg.h"
 #include "gpu.h"
 
+using namespace linalg;
+
 void test_tolerance(const Mat &M, const Mat &R, const Mat &S) {
   Mat M2 = R * S;
   float sum = Eigen::abs((M2 - M).array()).sum();
@@ -45,7 +47,11 @@ TEST(TestPolar, UnitaryHermitian) {
 }
 
 __global__ void polarDecompose(const Mat* A, Mat* R, Mat* S) {
-  polar_decomposition_device(*A, *R, *S);
+  linalg::polar_decomposition_device(*A, *R, *S);
+}
+
+__global__ void computeDeterminant(const Mat& A, real *out) {
+  *out = determinant(A);
 }
 
 TEST(TestDevicePolar, Basic) {
@@ -66,6 +72,22 @@ TEST(TestDevicePolar, Basic) {
   cudaFree(device_M);
   cudaFree(device_R);
   cudaFree(device_S);
+}
+
+TEST(TestDeterminant, Identity) {
+  Mat M = Mat::Identity();
+  Mat * device_M;
+  real det;
+  real* device_out;
+  cudaMalloc((void **)&device_M, sizeof(Mat));
+  cudaMalloc((void **)&device_out, sizeof(real));
+  cudaMemcpy(device_M, &M, sizeof(Mat), cudaMemcpyHostToDevice);
+  computeDeterminant<<<1, 1>>>(*device_M, device_out);
+  cudaMemcpy(&det, device_out, sizeof(real), cudaMemcpyDeviceToHost);
+  checkGpuError(cudaGetLastError());
+  checkGpuError(cudaDeviceSynchronize());
+  ASSERT_EQ(det, 1.0);
+  cudaFree(device_M);
 }
 
 int main(int argc, char **argv) {

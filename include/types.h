@@ -1,4 +1,5 @@
 #include <Eigen/Dense>
+#include "gpu.h"
 #ifndef COMMON_TYPES
 #define COMMON_TYPES
 
@@ -29,7 +30,7 @@ struct ParticleBase {
     Vec v; // Velocity.
     Mat F; // Deformation gradient.
 
-    ParticleBase(int type = 0, Vec x = Vec::Zero(), Vec v = Vec::Zero())
+    CUDA_HOSTDEV ParticleBase(int type = 0, Vec x = Vec::Zero(), Vec v = Vec::Zero())
 	: material_type(type), x(x), v(v), F(Mat::Identity()) {}
 };
 

@@ -15,7 +15,7 @@
 #include "renderer.h"
 #include "types.h"
 
-#include "MaterialModel.h"
+#include "MaterialModel.cuh"
 #include "InterpolationKernel.cuh"
 #include "TransferScheme.h"
 
@@ -52,7 +52,6 @@ public:
 
   std::vector<SimObject> objects;
 
-  Vec4* host_grid;
   int active_particle_count;
   MaterialModel* device_material_models;
 
@@ -66,6 +65,7 @@ private:
   SimulationParameters* device_parameters;
   Vec4* device_grid;
   Particle* device_particles;
+  Particle* host_particles;
 
 public:
   Simulation(const CLIOptions &opts,
@@ -73,6 +73,7 @@ public:
   ~Simulation();
   void initCuda();
   void advance();
+  void syncDevice();
 
   void addObject(std::string const & filepath,  // obj file defining the shape of the object
                  int material_model,
@@ -90,11 +91,11 @@ private:
   void resetGrid();
   void particleToGridTransfer(std::vector<SimObject> & objects);
   void gridOperations();
-  Vec4& getCell(int i, int j, int k);
-  void gridHostToDevice();
-  void gridDeviceToHost();
   void particlesToDevice();
+  void particlesToHost();
   void gridToParticleTransfer(std::vector<SimObject> & objects);
+
+  void reallocateParticles();
 
   std::pair<Eigen::MatrixXf, Eigen::MatrixXi> loadMesh(const std::string& filepath, double size, Vec position);
   void addParticles(std::pair<Eigen::MatrixXf, Eigen::MatrixXi> const & mesh,

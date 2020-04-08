@@ -17,11 +17,11 @@ set(CUDA_SEPARABLE_COMPILATION ON)
 include(CMakePackageConfigHelpers)
 
 file(GLOB SOURCES src/*.cpp src/*.c src/*.cu)
-list(REMOVE_ITEM SOURCES ${PROJECT_SOURCE_DIR}/src/main.cpp)
+list(REMOVE_ITEM SOURCES ${PROJECT_SOURCE_DIR}/src/main.cu)
 
 add_library(mpm_lib ${SOURCES})
 set_target_properties(mpm_lib PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-add_executable(mpm src/main.cpp)
+add_executable(mpm src/main.cu)
 
 find_package(OpenGL 4.1 REQUIRED)
 find_package(glfw3 3 REQUIRED)
@@ -30,11 +30,11 @@ find_package(Eigen3 3.3.7 REQUIRED)
 find_package(GTest)
 find_package(CUDA REQUIRED)
 
-find_package(OpenMP REQUIRED)
+# find_package(OpenMP REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 # message("-- Using openMP")
 set(CMAKE_CUDA_FLAGS_DEBUG "--expt-relaxed-constexpr -G -g")
-set(CMAKE_CUDA_FLAGS_RELEASE "--expt-relaxed-constexpr -O3")
+set(CMAKE_CUDA_FLAGS_RELEASE "--expt-relaxed-constexpr -O3 -gencode arch=compute_61,code=sm_61")
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall")

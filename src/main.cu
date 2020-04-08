@@ -1,5 +1,5 @@
 #include "types.h"
-#include "mpm.h"
+#include "mpm.cuh"
 #include "mesh_builder.h"
 #include "particle_writer.h"
 
@@ -134,10 +134,13 @@ int main(int argc, char *argv[]) {
 
   u32 save_every = u32(1. / float(FrameRate) / flags.dt);
   u32 frame_id = 0;
-  for (unsigned int i = 0; i < std::numeric_limits<unsigned int>::max(); i++) {
-    std::cout << "Step " << i << "\r" << std::flush;
+  for (u32 i = 0; i < std::numeric_limits<u32>::max(); i++) {
+    if (i % 10 == 0) {
+      std::cout << "Step " << i << "\r" << std::flush;
+    }
     simulation.advance();
-    if(i%20 == 0) {
+    if (i % 20 == 0) {
+      simulation.syncDevice();
       renderer.render(simulation.getActiveParticleList());
     }
     if (save && (i % save_every) == 0) {

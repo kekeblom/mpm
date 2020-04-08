@@ -11,10 +11,8 @@
 #include "types.h"
 #include "linalg.h"
 
-
-
-inline real clamp(const real &number, const real &lower, const real &upper) {
-  return std::max(std::min(number, upper), lower);
+__device__ inline real clamp(const real &number, const real &lower, const real &upper) {
+  return max(min(number, upper), lower);
 }
 
 template <class Particle>
@@ -57,7 +55,7 @@ public:
 
   __device__ Mat computePF(Particle const & particle) const {
     Mat R, S;
-    polar_decomposition_device(particle.F, R, S);
+    linalg::polar_decomposition_device(particle.F, R, S);
     real const &J = particle.Jp;
     return (2.0 * mu0 * (particle.F - R) * particle.F.transpose()) + lambda0 * ((J - 1.0) * J) * Mat::Identity();
   }
@@ -86,7 +84,7 @@ public:
 
   __device__ Mat computePF(Particle const & particle) const {
     Mat R, S;
-    polar_decomposition_device(particle.F, R, S);
+    linalg::polar_decomposition_device(particle.F, R, S);
     real e = std::exp(hardening * (1.0 - particle.Jp));
     real mu = this->mu0 * e;
     real lambda = this->lambda0 * e;
@@ -94,22 +92,24 @@ public:
     return (2.0 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1.0) * J) * Mat::Identity();
   }
 
-  void endOfStepMutation(Particle & particle) const {
+  __device__ void endOfStepMutation(Particle & particle) const {
     // plasticity
     Mat & F = particle.F;
 
-    auto svd = F.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
-    Mat sigma = svd.singularValues().asDiagonal();
-    Mat U = svd.matrixU();
-    Mat V = svd.matrixV();
+    Mat U, sigma(Mat::Zero()), V;
+    linalg::svd_decomposition(F, U, sigma, V);
+
     for (size_t i = 0; i < 3; i++) {
+      //sigma(i, i) = min(max(sigma(i, i), plast_clamp_lower), plast_clamp_higher);
       sigma(i, i) = clamp(sigma(i, i), plast_clamp_lower, plast_clamp_higher);
     }
 
-    real oldJ = F.determinant();
+    real oldJ = linalg::determinant(F);
     F = U * sigma * V.transpose();
 
-    real newJ = clamp(particle.Jp * oldJ / F.determinant(), 0.6, 20.0);
+    //real newJ = clamp(particle.Jp * oldJ / F.determinant(), 0.6, 20.0);
+    real Fdet = linalg::determinant(F);
+    real newJ = clamp(particle.Jp * oldJ / Fdet, 0.6, 20.0);
     particle.Jp = newJ;
   }
 };
@@ -130,7 +130,7 @@ public:
 
   __device__ Mat computePF(Particle const & particle) const {
     Mat R, S;
-    polar_decomposition_device(particle.F, R, S);
+    linalg::polar_decomposition_device(particle.F, R, S);
     real e = std::exp(hardening * (1.0 - particle.Jp));
     real mu = this->mu0 * e;
     real lambda = this->lambda0 * e;
@@ -138,8 +138,7 @@ public:
     return (2.0 * mu * (particle.F - R) * particle.F.transpose()) + lambda * ((J - 1.0) * J) * Mat::Identity();
   }
 
-  void endOfStepMutation(Particle & particle) const
-  {
+  __device__ void endOfStepMutation(Particle & particle) const {
     // plasticity
     Mat & F = particle.F;
 
