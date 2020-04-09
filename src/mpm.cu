@@ -11,20 +11,6 @@ float get_random() {
   return float(rand()) / float(RAND_MAX);
 }
 
-__global__ void zeroGrid(Vec4* grid) {
-  int N = gridDim.x;
-  int max_index = N * N * N;
-  int base_index = N * N * blockIdx.x + N * threadIdx.x;
-  for (int i=0; i < N; i++) {
-    int index = base_index +  i;
-    if (index >= max_index) return;
-    Vec4& cell = grid[index];
-    for (int j=0; j < GridVectorSize; j++) {
-      cell[j] = 0.0;
-    }
-  }
-}
-
 __global__ void particleToGrid(Particle* particles, Vec4* grid, MaterialModel* material_models,
     int cutoff, SimulationParameters *parameters, InterpolationKernel *interpolation_kernel) {
   __shared__ Particle block_particles[ParticleBlockSize];
@@ -223,7 +209,7 @@ void Simulation::syncDevice() {
 }
 
 void Simulation::resetGrid() {
-  zeroGrid<<<int(N), int(N)>>>(device_grid);
+  cudaMemset(device_grid, 0, par.N * par.N * par.N * sizeof(Vec4));
 }
 
 void Simulation::particleToGridTransfer(std::vector<SimObject> & objects) {

@@ -125,9 +125,9 @@ public:
                              Vec4 const & grid_node,
                              int i, int j, int k) {
     // adds, for each grid point, the respective contribution to the updated particle properties.
-    real weight = weights(0, i) * weights(1, j) * weights(2, k);
+    const real weight = weights(0, i) * weights(1, j) * weights(2, k);
 
-    Vec v_grid = grid_node.head<3>();
+    const Vec v_grid = grid_node.head<3>();
     particle.v += weight * v_grid;
 
     //particle.C += (Dinv * v_grid) * (weight * dist_part2node).transpose();
