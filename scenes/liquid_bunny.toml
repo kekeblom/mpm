@@ -1,0 +1,16 @@
+[[material]]
+name = "liquid"
+density = 1000
+E = 1.4e5
+Nu = 0.45
+hardening = 0
+plast_clamp_lower = 0.975
+plast_clamp_higher = 0.975
+
+[[object]]
+material = "liquid"
+mesh = "stanford_bunny.obj"
+size = 0.5
+position = [0.25, 0.4, 0.25]
+velocity = [0.0, 0.0, 0.0]
+

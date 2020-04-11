@@ -1,0 +1,3 @@
+[submodule "submodules/cpptoml"]
+	path = submodules/cpptoml
+	url = git@github.com:skystrife/cpptoml.git

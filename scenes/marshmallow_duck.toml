@@ -1,0 +1,32 @@
+[[material]]
+name = "rubber"
+density = 200
+E = 1.4e5
+Nu = 0.2
+hardening = 0
+plast_clamp_lower = 0.0
+plast_clamp_higher = 1.0e30
+
+[[material]]
+name = "liquid"
+density = 1000
+E = 1.4e5
+Nu = 0.45
+hardening = 0.0
+plast_clamp_lower = 0.975
+plast_clamp_higher = 0.975
+
+[[object]]
+material = "rubber"
+mesh = "rubber_duck.obj"
+size = 0.4
+position = [0.3, 0.4, 0.3]
+velocity = [0.0, 0.0, 0.0]
+
+[[object]]
+material = "liquid"
+mesh = "cube.obj"
+size = 0.35
+position = [0.325, 0.5, 0.325]
+velocity = [0.0, 0.0, 0.0]
+lifetime_begin = 1.8

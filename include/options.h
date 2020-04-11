@@ -11,7 +11,7 @@ struct CLIOptions {
   real dx;
   real N_real;
   std::string save_dir;
-  std::string load_mesh;
+  std::string scene;
 
   // Mesh builder parameters.
   u32 mesh_grid;
@@ -25,8 +25,8 @@ struct CLIOptions {
       ("dt", "Physics simulation time-step", cxxopts::value<float>()->default_value("1e-4"))
       ("N", "Grid dimensions", cxxopts::value<u32>()->default_value("60"))
       ("save-dir", "Where to save images", cxxopts::value<std::string>()->default_value(""))
+      ("scene", "Scene file to load", cxxopts::value<std::string>()->default_value("../scenes/snowman.toml"))
       ("particle-count", "Particle density (i.e. number of particles per unit cube)", cxxopts::value<u32>()->default_value("500000"))
-      ("load-mesh", "Mesh of object to simulate", cxxopts::value<std::string>()->default_value("../meshes/cube.obj"))
       ("mesh-grid", "Grid size for computing mesh", cxxopts::value<u32>()->default_value("250"))
       ("mesh-particle-radius", "Particle radius for computeing the mesh (in grid points)", cxxopts::value<u32>()->default_value("5"))
       ("mesh-face-count", "Approximate resulting mesh with x faces.", cxxopts::value<i32>()->default_value("-1"))
@@ -40,7 +40,7 @@ struct CLIOptions {
       this->dx = 1.0 / this->N;
       this->N_real = real(this->N);
       this->save_dir = flags["save-dir"].as<std::string>();
-      this->load_mesh = flags["load-mesh"].as<std::string>();
+      this->scene = flags["scene"].as<std::string>();
       this->mesh_grid = flags["mesh-grid"].as<u32>();
       this->mesh_particle_radius = flags["mesh-particle-radius"].as<u32>();
       this->mesh_face_count = flags["mesh-face-count"].as<i32>();

@@ -312,9 +312,9 @@ void Simulation::reallocateParticles() {
 }
 
 void printEnd(const char* name, std::chrono::time_point<std::chrono::high_resolution_clock>& start) {
-  auto now = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> diff = now - start;
-  std::cout << name << " took " << std::chrono::duration_cast<std::chrono::microseconds>(diff).count() / 10000.0 << "s" << std::endl;
+  auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
+  auto diff = std::chrono::duration_cast<std::chrono::microseconds>(now - start.time_since_epoch());
+  std::cout << name << " took " << double(diff.count()) / 1000.0 << "ms" << std::endl;
 }
 
 #include <chrono>
