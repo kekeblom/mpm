@@ -30,7 +30,7 @@ struct CLIOptions {
       ("mesh-grid", "Grid size for computing mesh", cxxopts::value<u32>()->default_value("250"))
       ("mesh-particle-radius", "Particle radius for computeing the mesh (in grid points)", cxxopts::value<u32>()->default_value("5"))
       ("mesh-face-count", "Approximate resulting mesh with x faces.", cxxopts::value<i32>()->default_value("-1"))
-      ("laplacian_smooth", "Apply laplacian smoothing to output mesh.", cxxopts::value<int>()->default_value("1"));
+      ("laplacian_smooth", "Apply laplacian smoothing to output mesh.", cxxopts::value<int>()->default_value("0"));
 
     try {
       auto flags = parser.parse(argc, argv);

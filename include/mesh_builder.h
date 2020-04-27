@@ -45,6 +45,7 @@ void fillVoxelGrid_weights(std::vector<Particle> const & particles, double dx, b
   u32 N3 =grid.shape()[2];
 
   // set to zero
+  #pragma omp parallel for
   for (u32 i=0; i < N1; i++) {
     for (u32 j=0; j < N2; j++) {
       for (u32 k=0; k < N3; k++) {
@@ -53,6 +54,7 @@ void fillVoxelGrid_weights(std::vector<Particle> const & particles, double dx, b
     }
   }
 
+  #pragma omp parallel for
   for (u32 pi = 0; pi < particles.size(); ++pi) {
     Particle const & particle = particles[pi];
 
@@ -92,6 +94,7 @@ void fillVoxelGrid_distance(std::vector<Particle> const & particles, real dx, re
   u32 N3 =grid.shape()[2];
 
   // set to cutoff distance
+  #pragma omp parallel for
   for (u32 i=0; i < N1; i++) {
     for (u32 j=0; j < N2; j++) {
       for (u32 k=0; k < N3; k++) {
@@ -100,6 +103,7 @@ void fillVoxelGrid_distance(std::vector<Particle> const & particles, real dx, re
     }
   }
 
+  #pragma omp parallel for
   for (u32 pi = 0; pi < particles.size(); ++pi) {
     Particle const & particle = particles[pi];
 
@@ -174,6 +178,7 @@ void MeshBuilder::computeMesh(const std::string& filename, const std::vector<Par
   const int point_count = std::pow(grid_side, 3);
   Eigen::VectorXd S(point_count);
   Eigen::MatrixXd GV(point_count, 3);
+  #pragma omp parallel for
   for (int i=0; i < grid_side; i++) {
     for (int j=0; j < grid_side; j++) {
       for (int k=0; k < grid_side; k++) {

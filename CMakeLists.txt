@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.9 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
 project(mpm LANGUAGES CXX C CUDA)
 
 #-------------------
 # build options
 #-------------------
-# option(USE_OPENMP "use parallelization with OpenMp" TRUE)
+option(USE_OPENMP "use parallelization with OpenMp" TRUE)
 
 #-------------------
 # General
@@ -33,8 +33,8 @@ find_package(CUDA REQUIRED)
 # find_package(OpenMP REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 # message("-- Using openMP")
-set(CMAKE_CUDA_FLAGS_DEBUG "--expt-relaxed-constexpr -G -g")
-set(CMAKE_CUDA_FLAGS_RELEASE "--expt-relaxed-constexpr -O3 -gencode arch=compute_61,code=sm_61")
+set(CMAKE_CUDA_FLAGS_DEBUG "--expt-relaxed-constexpr -G -g -Xcompiler -fopenmp")
+set(CMAKE_CUDA_FLAGS_RELEASE "--expt-relaxed-constexpr -O3 -Xcompiler -fopenmp")
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall")
@@ -45,9 +45,10 @@ link_directories(${LOCAL_LIB_DIR})
 
 set(COMMON_LIBRARIES ${OPENGL_gl_LIBRARY} glfw Boost::filesystem ${PNG_LIBRARIES} ${CMAKE_DL_LIBS})
 
-# if(USE_OPENMP)
-#     set(COMMON_LIBRARIES ${COMMON_LIBRARIES} OpenMP::OpenMP_CXX)
-# endif()
+if(USE_OPENMP)
+    find_package(OpenMP)
+    set(COMMON_LIBRARIES ${COMMON_LIBRARIES} OpenMP::OpenMP_CXX)
+endif()
 
 # add Partio (if available, otherwise no exporting of particles)
 find_library(PARTIO partio PATH ${LOCAL_LIB_DIR})
