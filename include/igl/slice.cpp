@@ -9,7 +9,7 @@
 #include "colon.h"
 
 #include <vector>
-#include <unsupported/Eigen/SparseExtra>
+#include <eigen3/unsupported/Eigen/SparseExtra>
 
 template <typename TX, typename TY>
 IGL_INLINE void igl::slice(

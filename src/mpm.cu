@@ -16,7 +16,7 @@ __global__ void particleToGrid(Particle* particles, Vec4* grid, MaterialModel* m
   __shared__ Particle block_particles[ParticleBlockSize];
   int pi = blockIdx.x * blockDim.x + threadIdx.x;
   float dx = parameters->dx;
-  int N = parameters->N;
+  u32 N = parameters->N;
   if (pi >= cutoff) return;
   block_particles[threadIdx.x] = particles[pi];
   Particle & particle = block_particles[threadIdx.x];
@@ -59,10 +59,12 @@ __global__ void particleToGrid(Particle* particles, Vec4* grid, MaterialModel* m
         u32 k_glob = range_begin[2] + k;
         particle_node_distance[2] = k_glob * dx - particle.x[2];
 
-        Vec4 node_contribution = transferScheme.p2g_node_contribution(particle, particle_node_distance, material_model.particleMass, i, j, k);
+        Vec4 node_contribution;
+        transferScheme.p2g_node_contribution(particle, particle_node_distance, material_model.particleMass,
+            i, j, k, node_contribution);
 
         int index = index_i + index_j + k_glob;
-        Vec4& cell = grid[index]; //getCell(i_glob, j_glob, k_glob);
+        Vec4& cell = grid[index];
         for (int idx = 0; idx < GridVectorSize; idx++) {
           atomicAdd(&(cell[idx]), node_contribution[idx]);
         }

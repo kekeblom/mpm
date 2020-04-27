@@ -1,4 +1,5 @@
 #include <cpptoml.h>
+#include <boost/filesystem.hpp>
 #include "types.h"
 #include "mpm.cuh"
 #include "mesh_builder.h"
@@ -6,6 +7,7 @@
 
 const unsigned int FrameRate = 240; // for export of data
 std::vector<MaterialModel> material_models;
+namespace fs = boost::filesystem;
 
 Vec toVector(cpptoml::option<std::vector<double>> &array) {
   Vec out;
@@ -22,10 +24,8 @@ int main(int argc, char *argv[]) {
 
   Simulation simulation(flags, InterpolationKernel(), material_models);
 
-  // "Scene selector"
-  // usage: uncomment the desired scene below ;)
-  // (also, set the correct path to the mesh directory)
-  std::string meshes_dir = "../meshes/";
+  fs::path scene_path(flags.scene);
+  std::string meshes_dir = fs::system_complete(scene_path.parent_path() / "meshes/").string();
 
   std::cout << "Loading scene file: " << flags.scene << std::endl;
   auto config = cpptoml::parse_file(flags.scene);

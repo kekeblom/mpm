@@ -25,7 +25,7 @@ struct CLIOptions {
       ("dt", "Physics simulation time-step", cxxopts::value<float>()->default_value("1e-4"))
       ("N", "Grid dimensions", cxxopts::value<u32>()->default_value("60"))
       ("save-dir", "Where to save images", cxxopts::value<std::string>()->default_value(""))
-      ("scene", "Scene file to load", cxxopts::value<std::string>()->default_value("../scenes/snowman.toml"))
+      ("scene", "Scene file to load", cxxopts::value<std::string>()->default_value("scenes/snowman.toml"))
       ("particle-count", "Particle density (i.e. number of particles per unit cube)", cxxopts::value<u32>()->default_value("500000"))
       ("mesh-grid", "Grid size for computing mesh", cxxopts::value<u32>()->default_value("250"))
       ("mesh-particle-radius", "Particle radius for computeing the mesh (in grid points)", cxxopts::value<u32>()->default_value("5"))

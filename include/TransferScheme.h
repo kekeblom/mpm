@@ -85,21 +85,18 @@ public:
     affine = stress + materialModel.particleMass * particle.C;
   }
 
-  __device__ Vec4 p2g_node_contribution(MLS_APIC_Particle const & particle,
+  __device__ void p2g_node_contribution(MLS_APIC_Particle const & particle,
                              Vec const & dist_part2node,
                              real particle_mass,
-                             int i, int j, int k) {
+                             int i, int j, int k, Vec4 &contribution) {
     // The momentum & mass contribution the particle has on a single grid-point
-    Vec momentum = particle.v * particle_mass;
-    Vec momentum_affine_delta_pos = momentum + affine * dist_part2node;
-    Vec4 momentum_mass(momentum_affine_delta_pos[0],
-                       momentum_affine_delta_pos[1],
-                       momentum_affine_delta_pos[2],
-                       particle_mass);
+    Vec affine_dist_part2node = affine * dist_part2node;
 
     real weight = weights(0, i) * weights(1, j) * weights(2, k);
-
-    return weight * momentum_mass;
+    contribution[0] = weight * (particle.v[0] * particle_mass + affine_dist_part2node[0]);
+    contribution[1] = weight * (particle.v[1] * particle_mass + affine_dist_part2node[1]);
+    contribution[2] = weight * (particle.v[2] * particle_mass + affine_dist_part2node[2]);
+    contribution[3] = weight * particle_mass;
   }
 
   __device__ void g2p_prepare_particle(MLS_APIC_Particle & particle,
