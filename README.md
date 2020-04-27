@@ -1,15 +1,19 @@
 
 This repository contains code for a simple CUDA accelerated material point method simulation.
 
+Here is a demo of the simulation which was rendered offline using Blender. (Click to view)
+
+[![Watch the video](assets/snowman.png)](https://youtu.be/_fLnN2TTFfY)
+
 ## Running using Docker
 
-The easiest way to run the code is using the provided Docker configuration. Build the image by running `docker -t mpm .` from the project directory. Once built, the image can be run with `./docker_run.sh`. Any arguments passed in, will be passed on to the simulation program. Check `include/options.h` for a full list of arguments.
+The easiest way to run the code is using the provided Docker configuration. Build the image by running `docker build -t mpm .` from the project directory. Once built, the image can be run with `./docker_run.sh`. Any arguments passed in, will be passed on to the simulation program. Check `include/options.h` for a full list of arguments.
 
 Here are some example simulations to try:
 ```
-./docker_run.sh --scene scene/rubber_duck.toml -N 16 --particle-count 10000
-./docker_run.sh --scene scene/liquid_bunny.toml -N 32 --particle-count 1000000
-./docker_run.sh --scene scene/snowman.toml -N 64 --particle-count 500000
+./docker_run.sh --scene scenes/rubber_duck.toml -N 16 --particle-count 10000
+./docker_run.sh --scene scenes/liquid_bunny.toml -N 32 --particle-count 1000000
+./docker_run.sh --scene scenes/snowman.toml -N 64 --particle-count 500000
 ```
 
 You should see the real-time debug view pop up. It looks 2D, but the simulation is actually run in 3D.
@@ -75,11 +79,9 @@ make -j
 ## Running
 From the build directory, type
 ```
-./bin/mpm
+./bin/mpm --scene ../scenes/snowman.toml
 ```
 This should open a small 2D visualization of the simulation with a yellow snowman and start simulating.
-
-**ATTENTION:** Please make sure to actually run the application from within the build folder (or any folder within the main project directory), such that all relative paths are correct (e.g. to find some input data.)
 
 Some command line options are available; these are the most important ones:
 
@@ -91,8 +93,7 @@ Some command line options are available; these are the most important ones:
 
 `save-dir`   where to save the output (mesh or particles) (default is empty, so no output is generated)
 
-`laplacian_smooth` whether to apply laplacian smoothing to the output mesh (0 or 1, default is 0).
-
+`laplacian smooth` whether to apply laplacian smoothing to the output mesh (0 or 1, default is 0).
 
 For further options, please refer directly to the file  `options.h`.
 
@@ -105,6 +106,8 @@ Example usage:
 
 This project was created in collaboration [Simon Duenser](https://github.com/sduenser). The simulation implements the method as detailed in the paper
 > Hu, Yuanming, et al. "A moving least squares material point method with displacement discontinuity and two-way rigid body coupling." ACM Transactions on Graphics (TOG) 37.4 (2018): 1-14.
+
+Their [simplified](https://github.com/yuanming-hu/taichi_mpm/blob/master/mls-mpm88-explained.cpp) implementation helped us get started.
 
 The license is GPLv3 due to the marching cubes library used from libigl.
 
